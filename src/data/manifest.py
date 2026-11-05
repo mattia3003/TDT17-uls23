@@ -63,18 +63,34 @@ def parse_case_id(case: str, pattern: str | None) -> tuple[str, bool]:
     return case, False
 
 
+def _file_key(name: str) -> str:
+    """File name without its extension (``x.nii.gz`` -> ``x``, ``x.png`` -> ``x``)."""
+    return strip_image_suffix(name) if is_image_file(name) else os.path.splitext(name)[0]
+
+
 def read_categories(category_dir: Path) -> dict[str, str]:
-    """Map case name -> category from ``category_dir/<category>/**/<case>.nii.gz``."""
+    """Map file key -> category from ``category_dir/<category>/**/<key>.<any extension>``.
+
+    A key found under several categories gets them joined with ``|``.
+    """
     categories: dict[str, str] = {}
     if not category_dir.is_dir():
         return categories
     for category in sorted(p.name for p in category_dir.iterdir() if p.is_dir()):
         for _, _, filenames in os.walk(category_dir / category):
             for name in filenames:
-                if is_image_file(name):
-                    case = strip_image_suffix(name)
-                    categories[case] = f"{categories[case]}|{category}" if case in categories else category
+                key = _file_key(name)
+                categories[key] = f"{categories[key]}|{category}" if key in categories else category
     return categories
+
+
+def category_key(case: str, pattern: str | None) -> str:
+    """Key used to look up a case's category: regex group ``key`` of ``pattern``, else the case name."""
+    if pattern:
+        match = re.match(pattern, case)
+        if match and match.groupdict().get("key"):
+            return match.group("key")
+    return case
 
 
 def list_cases(data_root: str | Path, data_cfg: Mapping[str, Any], dataset: str) -> pd.DataFrame:
@@ -97,11 +113,21 @@ def list_cases(data_root: str | Path, data_cfg: Mapping[str, Any], dataset: str)
             # Prefix with the dataset so equal IDs in different datasets never merge.
             "patient_id": f"{dataset}:{patient}",
             "id_parsed": parsed,
-            "category": categories.get(case, ""),
+            "category": categories.get(category_key(case, ds_cfg.get("category_key_pattern")), ""),
             "image": (image_dir / images[case]).relative_to(root).as_posix() if case in images else "",
             "label": (label_dir / labels[case]).relative_to(root).as_posix() if case in labels else "",
         })
     return pd.DataFrame(rows)
+
+
+def refresh_categories(manifest: pd.DataFrame, data_root: str | Path, data_cfg: Mapping[str, Any]) -> pd.DataFrame:
+    """Recompute the ``category`` column from the folder listing, without reading any volume."""
+    listing = pd.concat([list_cases(data_root, data_cfg, ds) for ds in data_cfg["datasets"]], ignore_index=True)
+    lookup = listing.set_index(["dataset", "case"])["category"]
+    keys = pd.MultiIndex.from_frame(manifest[["dataset", "case"]])
+    out = manifest.copy()
+    out["category"] = lookup.reindex(keys).fillna("").to_numpy()
+    return out
 
 
 def _xyz(prefix: str, values: Iterable[float]) -> dict[str, float]:

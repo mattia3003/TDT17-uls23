@@ -7,14 +7,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.data.eda import crop_fit, dataset_summary, problem_cases, usable_mask, write_report
-from src.data.manifest import build_manifest, list_cases, parse_case_id, voi_stats
+from src.data.eda import (crop_fit, dataset_summary, problem_cases, usable_mask, with_intensity_correction,
+                          write_report)
+from src.data.intensity import intensity_shift
+from src.data.manifest import build_manifest, list_cases, parse_case_id, refresh_categories, voi_stats
 from src.utils.config import load_yaml
 
 REPO = Path(__file__).resolve().parents[1]
 SHAPE = (32, 32, 16)
 SPACING = (0.5, 0.5, 2.0)
 PAD_VALUE = -2049.0
+INTENSITY_CFG = {"shifted_if_min_at_least": 0, "shift": 1024, "clip": [-1000, 1500]}
 
 
 def write_nifti(path: Path, array: np.ndarray) -> None:
@@ -161,8 +164,35 @@ def test_build_manifest_and_report(synthetic_root: Path, tmp_path: Path) -> None
     # Round-trip through CSV, as --reuse-manifest does, then write every table and figure.
     manifest.to_csv(tmp_path / "manifest.csv", index=False)
     reread = pd.read_csv(tmp_path / "manifest.csv")
-    eda_cfg = {"output_dir": str(tmp_path / "eda"), "crop_sizes": [[16, 16, 8]], "gallery_quantiles": [0.5]}
-    write_report(reread, synthetic_root, eda_cfg, ["DS_A", "DS_B"])
+    eda_cfg = {"output_dir": str(tmp_path / "eda"), "crop_sizes": [[16, 16, 8]], "gallery_quantiles": [0.5],
+               "gallery_windows": {"default": [-160, 240]}}
+    summary = write_report(reread, synthetic_root, eda_cfg, ["DS_A", "DS_B"], INTENSITY_CFG).set_index("dataset")
+    assert summary.loc["ALL", "n_shifted_vois"] == 0  # synthetic VOIs have negative values
     for name in ["summary_per_dataset.csv", "crop_fit.csv", "problem_cases.csv", "categories.csv", "label_quality.csv",
-                 "lesion_size.png", "spacing.png", "lesion_hu.png", "padding.png", "crop_fit.png", "gallery.png"]:
+                 "lesion_size.png", "spacing.png", "lesion_hu.png", "intensity_offset.png", "padding.png",
+                 "crop_fit.png", "gallery.png"]:
         assert (tmp_path / "eda" / name).is_file(), name
+
+
+def test_intensity_shift_rule() -> None:
+    assert intensity_shift(0.0, INTENSITY_CFG) == -1024.0  # no negative value: stored shifted
+    assert intensity_shift(-1024.0, INTENSITY_CFG) == 0.0
+    corrected = with_intensity_correction(pd.DataFrame({"image_min": [0.0, -2048.0], "hu_p00_5": [23.0, -1010.0]}),
+                                          INTENSITY_CFG)
+    assert corrected["hu_p00_5_corrected"].tolist() == [-1001.0, -1010.0]
+    assert corrected["intensity_group"].tolist() == ["stored +1024", "stored in HU"]
+
+
+def test_png_categories_match_by_key_pattern(synthetic_root: Path) -> None:
+    # DeepLesion-style: category files are key-slice PNGs without the _lesion_<nn> suffix.
+    cfg = {**DATA_CFG, "datasets": {"DS_B": {"id_pattern": DATA_CFG["datasets"]["DS_B"]["id_pattern"],
+                                             "category_dir": "data/{dataset}/categories",
+                                             "category_key_pattern": r"^(?P<key>.+)_lesion_\d+$"}}}
+    (synthetic_root / "data/DS_B/categories/Liver").mkdir(parents=True)
+    (synthetic_root / "data/DS_B/categories/Liver/b_7.png").touch()
+    cases = list_cases(synthetic_root, cfg, "DS_B").set_index("case")
+    assert cases.loc["b_7_lesion_01", "category"] == "Liver"
+    assert cases.loc["b_8_lesion_01", "category"] == ""
+
+    stale = cases.reset_index().assign(category="")
+    assert refresh_categories(stale, synthetic_root, cfg).set_index("case").loc["b_7_lesion_01", "category"] == "Liver"

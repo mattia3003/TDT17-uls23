@@ -15,6 +15,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
+from src.data.intensity import intensity_shift
 from src.data.manifest import load_nifti, spatial_array
 
 # Validated categorical palette (fixed order, never cycled) and neutral inks; see REFERENCES.md.
@@ -63,6 +64,21 @@ def usable_mask(manifest: pd.DataFrame) -> pd.Series:
             & _geometry_ok(manifest) & (_numeric(manifest, "lesion_voxels") > 0))
 
 
+INTENSITY_COLUMNS = ["hu_p00_5", "hu_p50", "hu_p99_5", "lesion_hu_median"]
+
+
+def with_intensity_correction(manifest: pd.DataFrame, intensity_cfg: Mapping[str, Any]) -> pd.DataFrame:
+    """Add the per-VOI shift of D17, the storage group, and ``<col>_corrected`` intensity columns."""
+    out = manifest.copy()
+    shift = _column(out, "image_min").map(lambda v: intensity_shift(v, intensity_cfg) if pd.notna(v) else 0.0)
+    out["intensity_shift"] = shift.astype(float)
+    out["intensity_group"] = np.where(shift != 0, f"stored +{int(intensity_cfg['shift'])}", "stored in HU")
+    for col in INTENSITY_COLUMNS:
+        if col in out:
+            out[f"{col}_corrected"] = out[col] + out["intensity_shift"]
+    return out
+
+
 def dataset_colors(datasets: Sequence[str]) -> dict[str, str]:
     """Fixed colour per dataset in config order."""
     if len(datasets) > len(PALETTE):
@@ -97,6 +113,10 @@ def _summarise(group: pd.DataFrame) -> dict[str, Any]:
         "lesion_hu_median_p05": q("lesion_hu_median", 0.05),
         "lesion_hu_median_median": q("lesion_hu_median", 0.5),
         "lesion_hu_median_p95": q("lesion_hu_median", 0.95),
+        "n_shifted_vois": int((_numeric(group, "intensity_shift") != 0).sum()),
+        "lesion_hu_corrected_p05": q("lesion_hu_median_corrected", 0.05),
+        "lesion_hu_corrected_median": q("lesion_hu_median_corrected", 0.5),
+        "lesion_hu_corrected_p95": q("lesion_hu_median_corrected", 0.95),
         "image_min_median": q("image_min", 0.5),
         "pad_fraction_median": q("pad_fraction", 0.5),
         "frac_touches_border": _bool_frac(_column(usable, "touches_border")),
@@ -234,9 +254,47 @@ def plot_spacing(usable: pd.DataFrame, datasets: Sequence[str], colors: Mapping[
 
 def plot_lesion_hu(usable: pd.DataFrame, datasets: Sequence[str], colors: Mapping[str, str], path: Path) -> None:
     fig, ax = plt.subplots(figsize=(7, 0.9 + 0.7 * len(datasets)))
-    _boxplot(ax, _by_dataset(usable, "lesion_hu_median", datasets), colors)
-    ax.set_xlabel("Median intensity inside the lesion (HU)")
+    _boxplot(ax, _by_dataset(usable, "lesion_hu_median_corrected", datasets), colors)
+    ax.set_xlabel("Median intensity inside the lesion (HU, after the offset correction)")
     ax.set_title("Lesion intensity per dataset")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def _by_storage_group(usable: pd.DataFrame, col: str, datasets: Sequence[str],
+                      colors: Mapping[str, str]) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+    """Values per dataset, split by storage group only where a dataset has more than one."""
+    data: dict[str, np.ndarray] = {}
+    label_colors: dict[str, str] = {}
+    for ds in datasets:
+        group = usable[usable["dataset"] == ds]
+        names = sorted(group["intensity_group"].unique())
+        for name in names:
+            label = ds if len(names) == 1 else f"{ds}\n({name})"
+            data[label] = group.loc[group["intensity_group"] == name, col].dropna().to_numpy(float)
+            label_colors[label] = colors[ds]
+    return data, label_colors
+
+
+def plot_intensity_offset(usable: pd.DataFrame, datasets: Sequence[str], colors: Mapping[str, str],
+                          path: Path) -> None:
+    """Low end of each VOI's intensities (about air) as stored and after the offset correction."""
+    raw, label_colors = _by_storage_group(usable, "hu_p00_5", datasets, colors)
+    fixed, _ = _by_storage_group(usable, "hu_p00_5_corrected", datasets, colors)
+    xlim = (-1500, 1000)
+    hidden = sum(int(((v < xlim[0]) | (v > xlim[1])).sum()) for v in [*raw.values(), *fixed.values()])
+    fig, axes = plt.subplots(1, 2, figsize=(11, 1.4 + 0.8 * len(raw)), sharex=True)
+    _boxplot(axes[0], raw, label_colors)
+    _boxplot(axes[1], fixed, label_colors, labels=False)
+    axes[0].set_title("As stored", fontsize=10)
+    axes[1].set_title("After the offset correction", fontsize=10)
+    for ax in axes:
+        ax.axvline(-1000, color=MUTED, linewidth=1, linestyle="--")
+        ax.set_xlim(*xlim)
+    fig.supxlabel(f"0.5th percentile of each VOI's intensities (HU; air is about −1000, dashed). "
+                  f"{hidden} outlier points outside the axis are not drawn.", color=INK_2, fontsize=9)
+    fig.suptitle("Some VOIs are stored with an intensity offset", color=INK, fontweight="bold")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -268,9 +326,13 @@ def plot_crop_fit(fit: pd.DataFrame, datasets: Sequence[str], colors: Mapping[st
     plt.close(fig)
 
 
-def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path, quantile: float) -> None:
-    """Axial slice with the largest lesion area, zoomed around the lesion, with the mask contour."""
-    image = spatial_array(load_nifti(data_root / row["image"])[0], dtype=np.float32)
+def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path, quantile: float,
+                   window: Sequence[float]) -> None:
+    """Axial slice with the largest lesion area, zoomed around the lesion, with the mask contour.
+
+    Intensities are offset-corrected and shown in a fixed HU ``window`` (low, high).
+    """
+    image = spatial_array(load_nifti(data_root / row["image"])[0], dtype=np.float32) + float(row["intensity_shift"])
     mask = spatial_array(load_nifti(data_root / row["label"])[0]) > 0
     z = int(mask.sum(axis=(0, 1)).argmax())
     lo = np.array([row["bbox_lo_x"], row["bbox_lo_y"]], dtype=int)
@@ -280,9 +342,7 @@ def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path, quantile: floa
     x0, y0 = np.clip(mid - half, 0, None)
     x1, y1 = np.minimum(mid + half, image.shape[:2])
     img, msk = image[x0:x1, y0:y1, z], mask[x0:x1, y0:y1, z]
-    body = img[img > image.min()]
-    vmin, vmax = np.percentile(body if body.size else img, [1, 99])
-    ax.imshow(np.rot90(img), cmap="gray", vmin=vmin, vmax=vmax)
+    ax.imshow(np.rot90(img), cmap="gray", vmin=window[0], vmax=window[1])
     if msk.any():
         ax.contour(np.rot90(msk), levels=[0.5], colors=CONTOUR, linewidths=1.2)
     ax.set_title(f"volume quantile {quantile:.2f}\n{row['case']}\n"
@@ -292,13 +352,17 @@ def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path, quantile: floa
 
 
 def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Sequence[float],
-                 data_root: Path, path: Path) -> pd.DataFrame:
-    """Rows = datasets, columns = lesion-volume quantiles. Returns the chosen cases."""
+                 windows: Mapping[str, Sequence[float]], data_root: Path, path: Path) -> pd.DataFrame:
+    """Rows = datasets, columns = lesion-volume quantiles. Returns the chosen cases.
+
+    ``windows`` maps a dataset to its display window in HU, with ``default`` for the rest.
+    """
     fig, axes = plt.subplots(len(datasets), len(quantiles), figsize=(3 * len(quantiles), 3.6 * len(datasets)),
                              squeeze=False)
     chosen = []
     for r, ds in enumerate(datasets):
         group = usable[usable["dataset"] == ds]
+        window = windows.get(ds, windows["default"])
         for c, qtl in enumerate(quantiles):
             ax = axes[r, c]
             if group.empty:
@@ -307,9 +371,10 @@ def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Seque
             target = float(group["lesion_mm3"].quantile(qtl))
             row = group.iloc[int(np.argmin(np.abs(group["lesion_mm3"].to_numpy(float) - target)))]
             chosen.append({"dataset": ds, "quantile": qtl, "case": row["case"], "lesion_mm3": row["lesion_mm3"]})
-            _gallery_panel(ax, row, data_root, qtl)
-        axes[r, 0].text(-0.08, 0.5, ds, transform=axes[r, 0].transAxes, rotation=90,
-                        ha="right", va="center", color=INK, fontweight="bold")
+            _gallery_panel(ax, row, data_root, qtl, window)
+        lo, hi = window
+        axes[r, 0].text(-0.08, 0.5, f"{ds}\nwindow {lo:g} to {hi:g} HU", transform=axes[r, 0].transAxes,
+                        rotation=90, ha="right", va="center", color=INK, fontweight="bold")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -317,11 +382,12 @@ def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Seque
 
 
 def write_report(manifest: pd.DataFrame, data_root: str | Path, eda_cfg: Mapping[str, Any],
-                 datasets: Sequence[str]) -> pd.DataFrame:
+                 datasets: Sequence[str], intensity_cfg: Mapping[str, Any]) -> pd.DataFrame:
     """Write all tables and figures to ``eda_cfg['output_dir']``; return the dataset summary."""
     out = Path(eda_cfg["output_dir"])
     out.mkdir(parents=True, exist_ok=True)
     colors = dataset_colors(datasets)
+    manifest = with_intensity_correction(manifest, intensity_cfg)
     usable = manifest[usable_mask(manifest)]
 
     summary = dataset_summary(manifest, datasets)
@@ -335,14 +401,15 @@ def write_report(manifest: pd.DataFrame, data_root: str | Path, eda_cfg: Mapping
         if not cats.empty:
             cats.groupby(["dataset", "category"]).agg(
                 n=("case", "size"), lesion_mm3_median=("lesion_mm3", "median"),
-                lesion_hu_median=("lesion_hu_median", "median"),
+                lesion_hu_median=("lesion_hu_median_corrected", "median"),
             ).reset_index().to_csv(out / "categories.csv", index=False)
 
     plot_lesion_size(usable, datasets, colors, out / "lesion_size.png")
     plot_spacing(usable, datasets, colors, out / "spacing.png")
     plot_lesion_hu(usable, datasets, colors, out / "lesion_hu.png")
+    plot_intensity_offset(usable, datasets, colors, out / "intensity_offset.png")
     plot_padding(usable, datasets, colors, out / "padding.png")
     plot_crop_fit(fit, datasets, colors, out / "crop_fit.png")
-    plot_gallery(usable, datasets, eda_cfg["gallery_quantiles"], Path(data_root), out / "gallery.png") \
-        .to_csv(out / "gallery_cases.csv", index=False)
+    plot_gallery(usable, datasets, eda_cfg["gallery_quantiles"], eda_cfg["gallery_windows"], Path(data_root),
+                 out / "gallery.png").to_csv(out / "gallery_cases.csv", index=False)
     return summary

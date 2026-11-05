@@ -68,6 +68,7 @@ Support both IDUN and the home PC from the start. The student chooses where to r
 - **Don't commit data, checkpoints or large outputs to git.**
 - **Keep short notes.** Record decisions in `DECISIONS.md` and external code and sources in `REFERENCES.md`. Acknowledging external resources is a project rule.
 - **Never tune on the test split.** It is used once, at the end.
+- **Check against real files before any long job (D12).** Run the exact same command locally on the small real-data sample (`data/sample/`, 2 VOIs per dataset, gitignored) before handing over an IDUN job. Long jobs fail fast on systematic errors and save intermediate outputs before later steps that could crash.
 - **Don't plan around dates.** The student works in periods alongside other projects. The only fixed date is the deadline.
 
 ## 3. What is known about ULS23 (verify in Phase 1)
@@ -97,13 +98,22 @@ These facts come from the public challenge material. The copy on IDUN may differ
 - **License:** CC BY-NC-SA 4.0.
 - **⚠ Only the 3 novel datasets are on IDUN:** `ULS23_DeepLesion3D`, `ULS23_Radboudumc_Bone` and `ULS23_Radboudumc_Pancreas`, about 1,618 lesions in total. There is no `processed_data/`, so kits21, LIDC-IDRI, LiTS, MDSC and NIH-LN are not available. Section 4's train/hold-out design must use these 3 datasets. Decide at Gate 1, and check the course channels in case more data is added.
 - **Layout:** images are in `data/<dataset>/images/` and labels in `annotations/<dataset>/labels/`, paired by identical filename. This is set in `configs/data/uls23.yaml`. The label folders also hold `*.nii.gz.zip` copies, which are ignored. `data/ULS23_DeepLesion3D/categories/<type>/` groups DeepLesion3D lesions by type (Abdominal, Bone, Kidney, Liver, Lung, Mediastinal, Other).
-- **Counts:** DeepLesion3D has 743 label files, against 750 in the README. Phase 1 checks the difference.
-- **Patient IDs:** DeepLesion3D filenames follow `<patient>_<study>_<series>_<slice>_lesion_<nn>`, so splits can be grouped by patient. The Radboud naming is not yet checked.
+- **Counts:** there are 1618 images and 1560 labels. 58 images have no label: 7 DeepLesion3D, 47 Bone and 4 Pancreas. Every label has an image. *(Verified in Phase 1.)*
+- **Patient IDs:** DeepLesion3D filenames follow `<patient>_<study>_<series>_<slice>_lesion_<nn>`, and Radboud filenames follow `bone_<id>_lesion_<nn>` and `diag_pancreas_<id>_lesion_<nn>`. That gives 549, 151 and 119 groups. For Bone this means a median of 3 and up to 21 lesions per ID, so grouping is essential. *(Verified in Phase 1; D10.)*
 - **Baseline spacing:** the ULS23 nnU-Net baseline used **no resampling**, through a dummy resampling function. This supports keeping the original spacing.
-- **Official split:** the challenge repo's `baseline_model` folder (on GitHub, not on IDUN) includes the authors' test split for the fully annotated data. Check in Phase 1 whether it is patient-grouped and usable.
-- **Intensity statistics:** the README gives per-dataset statistics that look like nnU-Net foreground (lesion-voxel) statistics. `ULS23_Radboudumc_Bone` has a median of 1276 HU and a 0.5th percentile of 31 HU. Phase 1 checks whether this is real or an intensity offset.
+- **Official split:** `baseline_model/train_test_split.json` covers all 1560 labelled lesions (170 test). It is patient-grouped: none of our 819 groups is on both sides. It is used for our test split (D15). *(Verified in Phase 1.)*
+- **Intensity offset (verified):** 555 of the 744 Bone VOIs are stored shifted by +1024 (minimum exactly 0, air near +23). The rest of Bone, and all of DeepLesion3D and Pancreas, are in HU. This explains the README's Bone statistics. It is corrected by a data-driven rule (D17).
+- **File format (verified):** volumes are stored as `(256, 256, 128, 1)` float32. 13 labels are plain 3-D int16. MONAI hides the extra axis, but plain nibabel does not (D11).
+- **Spacing (verified):** in-plane spacing is 0.33–0.98 mm and slice spacing is 0.45–5 mm. DeepLesion3D is split about evenly between 1 mm and 5 mm slices.
+- **Padding (verified):** DeepLesion3D VOIs are a median of 70 % padding, as whole empty slabs of slices. The padding value is often −1024, equal to air.
+- **Centering (verified):** all lesions contain the VOI centre and are a single connected piece. Only 8 Bone lesions touch the VOI edge.
 
 **Published reference point:** the semi-supervised ULS23 baseline reached Dice 0.703 ± 0.240 on the private challenge test set. This is context only, because our test split is a different population.
+
+**Per-lesion-type reference points (paper, Table 2, 10 % patient-level held-out training data; verify against the paper before quoting):**
+- **Bone (N = 86):** nnU-Net 0.674 ± 0.262. This is directly comparable to our Bone test lesions, which come from the same official split. Their models were trained on all of ULS23 (about 38k lesions), so a lower E1 result is expected.
+- **Pancreas (N = 38):** 0.556–0.616. This pools Radboudumc Pancreas with MSD Pancreas, and the model was trained on pancreas data. For our zero-shot E2 it is an upper reference only.
+- **DeepLesion3D:** no per-dataset result is reported. It falls under "various lesions".
 
 ### Pitfalls to check
 
@@ -119,16 +129,27 @@ These affect whether the results are valid, so they stay in scope. Each one is a
 
 ## 4. Experiment design
 
-**Training data (provisional):** 2–3 fully annotated datasets covering different anatomy, capped if needed to keep training time modest. One further dataset is **held out from training entirely**. Confirm this choice at Gate 1.
+**Training data (confirmed at Gate 1, D14):** `ULS23_DeepLesion3D` + `ULS23_Radboudumc_Bone` (1440 lesions). `ULS23_Radboudumc_Pancreas` (120 lesions) is **held out from training entirely**, for E2.
 
-**Splits:** patient-grouped train/val/test with a fixed seed. Commit the split files.
+**Splits (confirmed at Gate 1, D15):**
+- *Test:* the official ULS23 test cases of the training datasets (159 lesions).
+- *Validation:* about 15 % of the official training cases, grouped by patient, with a fixed seed.
+- *E2:* all of Pancreas.
+
+Commit the derived split file.
+
+**Preprocessing (confirmed at Gate 1, D16–D19):**
+- native voxel grid, with no resampling
+- the Bone +1024 offset corrected
+- intensities clipped to [−1000, 1500] HU and scaled to [0, 1]
+- 128×128×64 training patches, with sliding-window prediction on the full VOI
 
 | ID | Experiment | Question | Training |
 |---|---|---|---|
 | E0 | Overfit a few VOIs | Does the pipeline work? | Minutes |
 | E1 | **3D model**: MONAI `DynUNet` with Dice + CE loss | How good is a well-configured 3D U-Net? | 1 run |
 | E2 | **Generalization**: E1 on the held-out dataset | How does it do on an unseen lesion type? | None |
-| E3 | **Breakdown**: results by dataset and lesion size, plus failure review | Where does it fail, and why? | None |
+| E3 | **Breakdown**: results by dataset, lesion size, slice spacing, Bone intensity group and DeepLesion3D category, plus failure review | Where does it fail, and why? | None |
 | E4 | **Optional: 2D vs 3D**: 2D U-Net trained on slices, evaluated as reassembled 3D volumes | What is 3D context worth, and at what compute cost? | 1 run |
 | E5 | **Optional: multiple seeds**: repeat the final model(s) with different training seeds | How much do results vary between runs? | 2 extra runs per model |
 
@@ -160,7 +181,13 @@ The student decides at Gate 2 whether to run this, and can make the final call o
 ### Evaluation
 
 - **Metrics:** Dice and IoU per lesion, with mean, median and spread. Add precision and recall if they help explain failures.
-- **Breakdown:** per dataset and by lesion-size bin.
+- **Breakdown:** per dataset and by lesion-size bin. Three further breakdowns cost no extra training (added after Gate 1):
+  - *By slice spacing* (≤ 1.5 mm vs ≥ 3 mm): tests whether keeping the native grid (D16) hurts.
+  - *By Bone intensity group* (stored in HU vs shifted by +1024): checks that the offset correction (D17) worked.
+  - *By DeepLesion3D category* (Lung, Liver and so on).
+
+  Carry the needed columns from the manifest into the per-lesion CSV.
+- **Reference point:** quote the paper's per-lesion-type numbers (section 3) next to E1 for Bone, and as an upper reference for E2 Pancreas, with their caveats.
 - **Output:** save a per-lesion CSV, so new analyses don't require re-running inference.
 - **Selection:** use the validation split for model and threshold selection.
 
@@ -183,11 +210,12 @@ Other architectures, nnU-Net, hyperparameter searches, weakly annotated data, an
 
 Claude Code writes one analysis script and its Slurm job, and the student runs it. Results are saved to `results/eda/`.
 
-- [ ] Map the dataset: folders, file naming, image/label pairing, size on disk.
-- [ ] Build `data/manifest.csv` with one row per VOI: dataset, paths, patient/scan ID if available, spacing, lesion volume, lesion extents, and padding fraction.
-- [ ] Plot per-dataset lesion size and spacing distributions.
-- [ ] Make a small gallery of mask overlays per dataset (small, median and large lesions).
-- [ ] Measure the fraction of lesions that fit inside candidate crop sizes.
+- [x] Map the dataset: folders, file naming, image/label pairing, size on disk. (15.9 GB in total.)
+- [x] Build `data/manifest.csv` with one row per VOI: dataset, paths, patient/scan ID if available, spacing, lesion volume, lesion extents, and padding fraction. (Job 25936150. The manifest also records intensity and label-quality indicators.)
+- [x] Plot per-dataset lesion size and spacing distributions.
+- [x] Make a small gallery of mask overlays per dataset (small, median and large lesions).
+- [x] Measure the fraction of lesions that fit inside candidate crop sizes.
+- [ ] Fix the DeepLesion3D category reader (the categories are empty in the manifest), and redraw the figures kept for the video (D21).
 
 **🚦 Gate 1: present and decide**
 
@@ -202,6 +230,7 @@ Keep the 3–5 most useful figures for the video.
 - [ ] Write the central seeding function and the config loader.
 - [ ] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
 - [ ] Write config-driven MONAI transforms and a model factory that supports 2D and 3D.
+- [ ] Cache the deterministic part of preprocessing (load, offset correction, clipping and scaling) with MONAI's `PersistentDataset`, in the work directory. Measure during E0 whether data loading is a bottleneck; if not, caching can stay off.
 - [ ] Write a training script with mixed precision, checkpoint and resume, and CSV logging. Each run saves its resolved config, seed and git commit.
 - [ ] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space.
 - [ ] Test the metrics on synthetic masks, and test that the same seed gives the same splits.
@@ -300,13 +329,25 @@ The structure is required by the assignment. Timings are suggestions.
 | 7 | Key Learning Points | 0:30 | What was learned |
 | 8 | Contributions / References | 0:30 | Solo work, external code and sources |
 
+**Data analysis → decision map** (for section 3 of the video, from Gate 1):
+
+| Finding | Decision |
+|---|---|
+| 555 Bone VOIs stored shifted by +1024 (air near +23, not −1000) | Data-driven offset correction (D17), checked by the Bone-group breakdown in E3 |
+| Slice spacing 0.45–5 mm; the baseline did not resample | Keep the native grid (D16), checked by the spacing breakdown in E3 |
+| 98 % of lesions fit in 128×128×64; a few large Bone lesions do not | 128×128×64 patches plus sliding-window prediction on the full VOI (D19) |
+| Up to 21 lesions per Bone patient | Patient-grouped splits; the official split is reused (D15) |
+| Lesion intensities −905 to 1447 HU; padding down to −10405 | Clip to [−1000, 1500] and scale to [0, 1] (D18) |
+| Pancreas: large, low-contrast (4 HU) lesions from a different organ | Held out for the generalization test E2 (D14) |
+| Every lesion contains the VOI centre | Random patch positions; the centre prior is reported as a limitation (D19) |
+
 ## 9. Risks and fallbacks
 
 | Risk | Fallback |
 |---|---|
 | IDUN queues are slow | Shorter jobs with resume, or move the run to the home PC |
 | GPU memory is limited | Smaller crop, smaller batch size, or fewer VOIs |
-| Data loading is too slow | Cache preprocessed data in the work area, or reduce the subset |
+| Data loading is too slow | Cache preprocessed data in the work area with MONAI `PersistentDataset`, or reduce the subset |
 | Patient IDs are unavailable | Group by the best available ID, and state the risk in the video |
 | Performance is poor | Time-box debugging, then present the failure analysis |
 | Time runs short | Skip E5 first, then E4. If still short, skip E2 and use a single dataset for training and testing |

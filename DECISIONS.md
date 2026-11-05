@@ -36,3 +36,61 @@ Short log of non-obvious choices, so each one can be explained in the video. New
 - flatness (smallest over largest physical extent, computed in the report)
 
 They are summarised per dataset and listed per case in `label_quality.csv`. Label noise is reported as a limitation. Cases are only left out if they are clearly broken, and then they are documented.
+
+## Gate 1: Data decisions (confirmed by the student, 2026-11-05)
+
+The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`.
+
+**D14. Train on ULS23_DeepLesion3D + ULS23_Radboudumc_Bone (1440 lesions). Hold out ULS23_Radboudumc_Pancreas (120 lesions) entirely, for E2.**
+- *Why:* only these 3 datasets are on IDUN (section 3 of the plan). Training on the two largest keeps the most data: 743 DeepLesion3D lesions from many body regions plus 697 bone lesions. Pancreas is a separate organ and lesion type, so it makes a meaningful generalization test with no extra training. Its tumours are large (median Ø 27 mm, against 11 and 15 mm) and have very low contrast to their surroundings (median 4 HU, against 67 and 135).
+- *Alternative considered:* holding out Bone. That is the more extreme shift, but it would cut training data to 863 lesions, and E2 would then mostly test sclerotic bone appearance.
+- *Limitation:* DeepLesion3D includes abdominal lesions, so E2 tests a new dataset, annotation protocol and lesion type, not entirely unseen anatomy.
+
+**D15. Splits:**
+- *Test:* the official ULS23 test cases of the two training datasets (74 DeepLesion3D + 85 Bone).
+- *Validation:* about 15 % of the official training cases, grouped by patient, with its own fixed seed.
+- *E2 test:* all 120 Pancreas lesions, never used for any selection.
+- *Why:* the official split (`baseline_model/train_test_split.json`, ULS23 repo commit `f45a172`, SHA-256 `4d781d5c…`) covers all 1560 labelled lesions. Not one of our 819 patient groups is on both sides. Reusing it makes our test results comparable with the authors' own evaluation on these datasets, and it avoids a test split of our own making. The file is downloaded and checked against its checksum rather than copied into git, because the repo shows no license. The derived split file we commit lists only case IDs.
+- *Limitation:* for the Radboud datasets we can't tell whether an ID is a patient or a single study (D10). The official split agrees with our grouping, though.
+
+**D16. Keep the native voxel grid (no resampling).**
+- *Why:* the ULS23 nnU-Net baseline also used no resampling. It is the simplest choice. Predictions are made directly in the original VOI space, so metrics need no resampling back and lose nothing to interpolation.
+- *Limitation:* slice spacing ranges from 0.45 to 5 mm (DeepLesion3D: 343 VOIs at 1 mm, 366 at 5 mm). A patch of 64 slices therefore covers 32–320 mm in z, and the network sees lesions at varying depth scales. A breakdown by slice spacing in E3 would show whether this matters (suggested plan change).
+
+**D17. Correct the Bone intensity offset: VOIs with no negative values are shifted by +1024, so subtract 1024.**
+- *Evidence:* 555 of the 744 Bone VOIs (115 of 151 patients) have a minimum of exactly 0, with air near +23 instead of −1000. The other 189 Bone VOIs, and all DeepLesion3D and Pancreas VOIs, have minimums below −500. No VOI falls in between, and every patient is entirely on one scale. After subtracting 1024, the shifted group matches the HU group:
+
+  | Statistic | HU group | Shifted group − 1024 |
+  |---|---|---|
+  | 0.5th percentile (air) | −1010 | −1003 |
+  | median | −47 | −45 |
+  | 99.5th percentile | 866 | 819 |
+
+  This also explains the README's Bone lesion median of "1276 HU".
+- *Why a data-driven rule:* "No negative value in a CT VOI" can't happen in HU, because every 256×256 region contains air or fat. So the rule is safe and isn't tied to one dataset name. It never fires on the other datasets. Without the correction, the same tissue would get two different intensities in training.
+
+**D18. Clip intensities to [−1000, 1500] HU, then scale linearly to [0, 1].**
+- *Why:* the 0.5th and 99.5th percentiles of lesion intensities in the training split are −905 and 1447 HU (after D17). The window is rounded outward so that air and lung context are kept, and so that dense sclerotic bone lesions are not cut off. A linear scaling loses no contrast, which matters for the low-contrast pancreas lesions. Clipping removes padding and metal extremes (minimums of −2048, −3024, −8477 and −10405).
+- *Consequence:* padding becomes −1000, the same as air. That is acceptable because padding sits outside the body, but it means DeepLesion3D's empty slabs look like air. They make up a median of 70 % of each DeepLesion3D VOI, because DeepLesion only provides slices near each lesion.
+
+**D19. Train on 128×128×64-voxel patches, and predict on the whole 256×256×128 VOI with a sliding window.**
+- *Why:* 98 % of lesion bounding boxes fit in the patch (DeepLesion3D 99.8 %, Bone about 96.5 %, Pancreas 96.7 %). Sliding-window prediction still covers the few larger lesions, such as the 8 Bone lesions that touch the VOI edge (30–55 mm). The patch fits on both GPUs (2.3 GB at batch size 2 in the Phase 0 check) and is the plan's starting point.
+- *Centre prior:* every lesion contains the VOI centre, by construction. Random patch positions in training weaken the model's use of absolute position, but the prior stays and is reported as a limitation.
+
+**D20. No lesions are excluded for label quality. The 58 images without a label are left out.**
+- *Why:* nothing is clearly broken. There are no read errors, no geometry mismatches, no labels with more than two values, and no masks in several pieces. The indicators (D13) show small holes in some slice for 43 % of Pancreas masks (6 % overall), and 1.7 % of masks lie on a single slice. These are reported in E3 and in the limitations.
+
+**D21. Figures kept for the video:** `lesion_size.png`, `spacing.png`, a before/after figure of the Bone intensity offset (D17), the gallery redrawn with a fixed display window and corrected intensities, and optionally `crop_fit.png`.
+
+**D22. Plan changes accepted after Gate 1.**
+- E3 gets three extra breakdowns: slice spacing, Bone intensity group and DeepLesion3D category. They test D16 and D17 and need no extra training.
+- The real-file check (D12) is now part of the working agreement.
+- Deterministic preprocessing is cached with MONAI `PersistentDataset`, if E0 shows that loading is a bottleneck.
+- Per-dataset baseline numbers from the ULS23 paper are used as a reference point. The paper (Table 2) reports Bone (Dice 0.674, same split) and a pooled Pancreas number, but nothing for DeepLesion3D. See section 3 of the plan.
+- The video gets a "finding → decision" map.
+- *Why:* each change either tests a Gate 1 decision or makes a finding easier to present, at almost no extra compute.
+
+**D23. DeepLesion3D categories are matched by key slice, and figures use corrected intensities with fixed display windows.**
+- *Categories:* the files in `categories/<type>/` are key-slice PNGs named `<patient>_<study>_<series>_<slice>.png`, one per VOI (750 in total), without our `_lesion_<nn>` suffix. A key pattern in the data config strips the suffix before matching. Categories come from a folder listing, so `--reuse-manifest` refreshes them without reading any volume.
+- *Intensity settings:* D17 and D18 live in `configs/data/uls23.yaml` under `data.intensity`, and one function (`src/data/intensity.py`) applies the rule. The EDA uses it now, and the Phase 2 transforms will use the same code.
+- *Gallery windows:* the gallery uses fixed windows instead of per-slice percentiles, so brightness means the same thing in every panel. Soft tissue is −160 to 240 HU; Bone is −450 to 1250 HU, so that sclerotic lesions aren't saturated.

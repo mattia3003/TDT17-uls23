@@ -8,7 +8,9 @@ All external code, data and sources used in the project. Required by the project
 - F. Isensee et al., *nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation*, Nature Methods 18 (2021) 203–211. The ULS23 baseline and the design of MONAI `DynUNet` are based on it.
 - ULS23 challenge site: https://uls23.grand-challenge.org
 - ULS23 repository (data description, MONAI version note): https://github.com/MJJdG/ULS23
-- ULS23 public training data license: CC BY-NC-SA 4.0. The original source datasets (KiTS21, LIDC-IDRI, LiTS, Medical Segmentation Decathlon, NIH Lymph Nodes) are cited in the dataset README. The ones we use will be added here after Gate 1.
+- ULS23 public training data license: CC BY-NC-SA 4.0. We use only the three ULS23 novel-annotation datasets (DeepLesion3D, Radboudumc_Bone, Radboudumc_Pancreas). The processed public datasets (KiTS21, LIDC-IDRI, LiTS, Medical Segmentation Decathlon, NIH Lymph Nodes) are not on IDUN and are not used.
+- DeepLesion, the source of the DeepLesion3D VOIs: K. Yan, X. Wang, L. Lu, R. M. Summers, *DeepLesion: automated mining of large-scale lesion annotations and universal lesion detection with deep learning*, Journal of Medical Imaging 5(3) (2018) 036501. https://doi.org/10.1117/1.JMI.5.3.036501
+- Official ULS23 train/test split: `baseline_model/train_test_split.json` in https://github.com/DIAGNijmegen/ULS23, commit `f45a17259bdaaa87dc1a0aaf2f7004c292b73fc7`, SHA-256 `4d781d5c1f5fae991295b41f5d4cc2d3a27cbd781071fae97f17ee0a6d135c0a`. We use its test cases for the two training datasets (D15). The file is downloaded and not redistributed, because the repo shows no license.
 
 ## Software
 

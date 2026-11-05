@@ -1,0 +1,10 @@
+dataset,quantile,case,lesion_mm3
+ULS23_DeepLesion3D,0.05,003185_06_03_142_lesion_01,154.88569640370065
+ULS23_DeepLesion3D,0.5,000622_03_01_068_lesion_01,686.1121784897591
+ULS23_DeepLesion3D,0.95,003682_02_02_419_lesion_01,4397.2855639907375
+ULS23_Radboudumc_Bone,0.05,bone_00389_lesion_04,104.86511993408203
+ULS23_Radboudumc_Bone,0.5,bone_00507_lesion_02,1688.1619091033936
+ULS23_Radboudumc_Bone,0.95,bone_00261_lesion_03,21623.32862460053
+ULS23_Radboudumc_Pancreas,0.05,diag_pancreas_1055_lesion_01,1563.7766418457031
+ULS23_Radboudumc_Pancreas,0.5,diag_pancreas_0265_lesion_01,10338.170654296875
+ULS23_Radboudumc_Pancreas,0.95,diag_pancreas_1085_lesion_01,77060.16799926758

@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.data.eda import write_report
-from src.data.manifest import build_manifest
+from src.data.manifest import build_manifest, refresh_categories
 from src.utils.config import add_config_arguments, config_from_args
 
 
@@ -34,7 +34,10 @@ def main() -> None:
     start = time.perf_counter()
 
     if args.reuse_manifest:
-        manifest = pd.read_csv(manifest_path)
+        # Categories come from a folder listing (cheap), so refresh them in case the reader changed.
+        manifest = refresh_categories(pd.read_csv(manifest_path), data_root, cfg["data"])
+        manifest.to_csv(manifest_path, index=False)
+        print(f"Refreshed categories in {manifest_path}")
     else:
         manifest = build_manifest(data_root, cfg["data"], num_workers=cfg["machine"]["num_workers"],
                                   check_after=cfg["eda"]["check_after"],
@@ -43,7 +46,7 @@ def main() -> None:
         manifest.to_csv(manifest_path, index=False)
         print(f"Wrote {manifest_path} ({len(manifest)} rows)")
 
-    summary = write_report(manifest, data_root, cfg["eda"], datasets)
+    summary = write_report(manifest, data_root, cfg["eda"], datasets, cfg["data"]["intensity"])
     with pd.option_context("display.max_columns", None, "display.width", 200):
         print(summary.set_index("dataset").T.to_string())
     print(f"\nWrote tables and figures to {cfg['eda']['output_dir']} in {time.perf_counter() - start:.0f} s")
