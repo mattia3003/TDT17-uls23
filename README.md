@@ -16,6 +16,10 @@ results/     small CSVs and final figures
 
 Data, caches, checkpoints and predictions live outside git, under `paths.work_dir` from the machine config.
 
+## Data
+
+On IDUN, `paths.data_root` holds `data/<dataset>/images/` and `annotations/<dataset>/labels/`, paired by filename (see `configs/data/uls23.yaml`). Only the 3 novel ULS23 datasets are present. For the home PC, copy the same two subtrees for the selected datasets and keep the folder structure.
+
 ## Setup: home PC (Windows, PowerShell)
 
 ```powershell

@@ -1,0 +1,9 @@
+# ULS23 layout as found on IDUN (Phase 0). Paths are relative to paths.data_root;
+# {dataset} is replaced by each name in `datasets`. Images and labels pair by identical filename.
+data:
+  image_dir: data/{dataset}/images
+  label_dir: annotations/{dataset}/labels
+  datasets:
+    - ULS23_DeepLesion3D
+    - ULS23_Radboudumc_Bone
+    - ULS23_Radboudumc_Pancreas

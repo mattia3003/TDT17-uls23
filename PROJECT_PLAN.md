@@ -88,7 +88,20 @@ These facts come from the public challenge material. The copy on IDUN may differ
 |---|---|---|
 | Novel annotations | `ULS23_DeepLesion3D`, `ULS23_Radboudumc_Bone`, `ULS23_Radboudumc_Pancreas` | Bone and pancreas are described as challenging lesion types |
 | Processed public | `kits21`, `LIDC-IDRI`, `LiTS`, `MDSC` tasks 6/7/10, `NIH-LN` | Check the lesion type and annotation quality of each |
-| Weakly annotated | `DeepLesion`, likely `CCC18` | Out of scope. **Confirm which datasets fall here** |
+| Weakly annotated | `DeepLesion`, `CCC18` | Out of scope. Confirmed by the IDUN README (`partially_annotated/`, GrabCut masks from 2D measurements) |
+
+**Verified from the IDUN copy's `README.md` (Phase 0):**
+
+- **Folder names:** fully annotated data is in `novel_data/` (`ULS23_DeepLesion3D`: 750, `ULS23_Radboudumc_Bone`: 744, `ULS23_Radboudumc_Pancreas`: 124) and in `processed_data/fully_annotated/` (`kits21`: 333, `LIDC-IDRI`: 2,246, `LiTS`: 888, `MDSC_Task06_Lung`: 76, `MDSC_Task07_Pancreas`: 283, `MDSC_Task10_Colon`: 133, `NIH_LN_ABD`: 558, `NIH_LN_MED`: 379).
+- **LNDb:** not included, because of its license.
+- **License:** CC BY-NC-SA 4.0.
+- **⚠ Only the 3 novel datasets are on IDUN:** `ULS23_DeepLesion3D`, `ULS23_Radboudumc_Bone` and `ULS23_Radboudumc_Pancreas`, about 1,618 lesions in total. There is no `processed_data/`, so kits21, LIDC-IDRI, LiTS, MDSC and NIH-LN are not available. Section 4's train/hold-out design must use these 3 datasets. Decide at Gate 1, and check the course channels in case more data is added.
+- **Layout:** images are in `data/<dataset>/images/` and labels in `annotations/<dataset>/labels/`, paired by identical filename. This is set in `configs/data/uls23.yaml`. The label folders also hold `*.nii.gz.zip` copies, which are ignored. `data/ULS23_DeepLesion3D/categories/<type>/` groups DeepLesion3D lesions by type (Abdominal, Bone, Kidney, Liver, Lung, Mediastinal, Other).
+- **Counts:** DeepLesion3D has 743 label files, against 750 in the README. Phase 1 checks the difference.
+- **Patient IDs:** DeepLesion3D filenames follow `<patient>_<study>_<series>_<slice>_lesion_<nn>`, so splits can be grouped by patient. The Radboud naming is not yet checked.
+- **Baseline spacing:** the ULS23 nnU-Net baseline used **no resampling**, through a dummy resampling function. This supports keeping the original spacing.
+- **Official split:** the challenge repo's `baseline_model` folder (on GitHub, not on IDUN) includes the authors' test split for the fully annotated data. Check in Phase 1 whether it is patient-grouped and usable.
+- **Intensity statistics:** the README gives per-dataset statistics that look like nnU-Net foreground (lesion-voxel) statistics. `ULS23_Radboudumc_Bone` has a median of 1276 HU and a 0.5th percentile of 31 HU. Phase 1 checks whether this is real or an intensity offset.
 
 **Published reference point:** the semi-supervised ULS23 baseline reached Dice 0.703 ± 0.240 on the private challenge test set. This is context only, because our test split is a different population.
 

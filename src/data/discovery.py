@@ -1,43 +1,35 @@
-"""Cheap helpers for finding files in a dataset tree without walking all of it."""
+"""Cheap helpers for locating files in the dataset tree without walking all of it."""
 
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 IMAGE_SUFFIXES = (".nii.gz", ".nii", ".mha", ".nrrd")
 
 
 def is_image_file(name: str) -> bool:
-    """True if ``name`` has a medical-image suffix we can load."""
+    """True if ``name`` has a medical-image suffix we can load (``*.nii.gz.zip`` is not one)."""
     return name.lower().endswith(IMAGE_SUFFIXES)
 
 
-def find_first_pair(
-    root: str | Path,
-    image_dir: str = "images",
-    label_dir: str = "labels",
-    max_depth: int = 4,
-) -> tuple[Path, Path] | None:
-    """Return the first ``(image, label)`` pair under ``root``, or ``None``.
+def dataset_dirs(data_root: str | Path, data_cfg: Mapping[str, Any], dataset: str) -> tuple[Path, Path]:
+    """Return ``(image_dir, label_dir)`` for ``dataset`` from the ``data`` config section."""
+    root = Path(data_root)
+    return (
+        root / data_cfg["image_dir"].format(dataset=dataset),
+        root / data_cfg["label_dir"].format(dataset=dataset),
+    )
 
-    Looks top-down for a directory named ``image_dir`` whose sibling ``label_dir``
-    holds a file with the same name. Stops at the first match and never descends
-    more than ``max_depth`` levels, so it stays light on large trees.
-    """
-    root = Path(root)
-    base_depth = len(root.parts)
-    for dirpath, dirnames, filenames in os.walk(root):
-        current = Path(dirpath)
-        dirnames.sort()
-        if len(current.parts) - base_depth >= max_depth:
-            dirnames.clear()
-        if current.name != image_dir:
-            continue
-        label_root = current.parent / label_dir
-        for name in sorted(filenames):
-            if is_image_file(name) and (label_root / name).is_file():
-                return current / name, label_root / name
+
+def first_pair(image_dir: str | Path, label_dir: str | Path) -> tuple[Path, Path] | None:
+    """Return the first image in ``image_dir`` (sorted) that has a same-named file in ``label_dir``."""
+    image_dir, label_dir = Path(image_dir), Path(label_dir)
+    for name in sorted(os.listdir(image_dir)):
+        if is_image_file(name) and (label_dir / name).is_file():
+            return image_dir / name, label_dir / name
     return None
 
 

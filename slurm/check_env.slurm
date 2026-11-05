@@ -14,4 +14,4 @@ cd "${SLURM_SUBMIT_DIR:-.}"
 source slurm/idun_env.sh
 
 nvidia-smi
-python scripts/check_env.py --machine configs/machines/idun.yaml
+python scripts/check_env.py --config configs/data/uls23.yaml --machine configs/machines/idun.yaml

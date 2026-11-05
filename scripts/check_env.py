@@ -1,12 +1,13 @@
 """Phase 0 environment check.
 
-Prints library and GPU info, shows the top of the data tree, loads ONE image/label
-VOI with MONAI, and runs ONE mixed-precision DynUNet training step. Deliberately
-light: it reads a single VOI and never iterates over the dataset.
+Prints library and GPU info, shows the top of the data tree, loads the first
+image/label VOI of each configured dataset with MONAI, and runs ONE mixed-precision
+DynUNet training step. Deliberately light: it reads one VOI per dataset and never
+iterates over the data.
 
 Examples:
     python scripts/check_env.py --machine configs/machines/home_pc.yaml --no-data
-    python scripts/check_env.py --machine configs/machines/idun.yaml
+    python scripts/check_env.py --config configs/data/uls23.yaml --machine configs/machines/idun.yaml
 """
 
 from __future__ import annotations
@@ -30,13 +31,13 @@ from monai.transforms import Compose, EnsureChannelFirstd, LoadImaged, ResizeWit
 from monai.utils import convert_to_tensor
 from torch.amp.grad_scaler import GradScaler
 
-from src.data.discovery import describe_tree, find_first_pair
-from src.utils.config import load_config
+from src.data.discovery import dataset_dirs, describe_tree, first_pair
+from src.utils.config import add_config_arguments, config_from_args
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--machine", required=True, help="Machine config, e.g. configs/machines/idun.yaml.")
+    add_config_arguments(parser)
     parser.add_argument("--image", type=Path, help="Explicit image path (skips auto-discovery).")
     parser.add_argument("--label", type=Path, help="Explicit label path (used with --image).")
     parser.add_argument("--no-data", action="store_true", help="Skip data checks; use a random tensor.")
@@ -130,32 +131,48 @@ def gpu_step(device: torch.device, image: torch.Tensor, label: torch.Tensor, bat
     print(f"step     input {tuple(x.shape)}, loss {loss.item():.4f}, {elapsed:.2f} s (includes warm-up){peak}")
 
 
+def find_pairs(cfg: dict) -> list[tuple[Path, Path]]:
+    """Print the top of the data tree and return the first image/label pair of each dataset."""
+    data_root = Path(cfg["paths"]["data_root"])
+    print(f"\nData tree (top levels) under {data_root}:")
+    print("\n".join(describe_tree(data_root, max_depth=3)))
+    if "data" not in cfg:
+        print("\nWARNING  no data config given (--config configs/data/uls23.yaml); skipping VOI loading.")
+        return []
+    pairs = []
+    for dataset in cfg["data"]["datasets"]:
+        pair = first_pair(*dataset_dirs(data_root, cfg["data"], dataset))
+        if pair is None:
+            print(f"\nWARNING  {dataset}: no image with a same-named label found.")
+        else:
+            pairs.append(pair)
+    return pairs
+
+
 def main() -> None:
     args = parse_args()
-    cfg = load_config([args.machine])
+    cfg = config_from_args(args)
     print(f"machine  {cfg['machine']['name']}")
     report_versions()
     device = report_gpu()
 
     roi = tuple(args.roi)
-    pair: tuple[Path, Path] | None = None
+    pairs: list[tuple[Path, Path]] = []
     if args.image:
-        pair = (args.image, args.label)
+        pairs = [(args.image, args.label)]
     elif not args.no_data:
-        data_root = Path(cfg["paths"]["data_root"])
-        print(f"\nData tree (top levels) under {data_root}:")
-        print("\n".join(describe_tree(data_root, max_depth=3)))
-        pair = find_first_pair(data_root)
-        if pair is None:
-            print("\nWARNING  no images/ + labels/ pair found; GPU step uses synthetic data. "
-                  "Share the tree above so the layout can be mapped.")
+        pairs = find_pairs(cfg)
 
-    if pair is None:
+    if not pairs:
+        print("\nGPU step uses synthetic data.")
         image = torch.randn(1, *roi)
         label = (torch.rand(1, *roi) > 0.95).float()
     else:
-        print()
-        image, label = load_voi(*pair)
+        loaded = []
+        for pair in pairs:
+            print()
+            loaded.append(load_voi(*pair))
+        image, label = loaded[0]
         crop = ResizeWithPadOrCrop(roi)
         image = convert_to_tensor(crop(image), track_meta=False)
         label = convert_to_tensor(crop(label), track_meta=False)
