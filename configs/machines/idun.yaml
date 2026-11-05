@@ -1,0 +1,9 @@
+# Machine config for NTNU IDUN. Merged last, so it only holds machine-specific values.
+machine:
+  name: idun
+
+paths:
+  # Course copy of ULS23. Read-only: never write here.
+  data_root: /cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23
+  # Runs, checkpoints, caches and predictions (outside git). ${USER} is expanded at load time.
+  work_dir: /cluster/work/${USER}/tdt17-uls23

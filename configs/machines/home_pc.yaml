@@ -1,0 +1,9 @@
+# Machine config for the home PC (RTX 2080 Ti, 11 GB). Merged last, so it only holds machine-specific values.
+machine:
+  name: home_pc
+
+paths:
+  # TODO(after Gate 1): folder holding the copied ULS23 subset (same layout as on IDUN).
+  data_root: D:/uls23/ULS23
+  # Runs, checkpoints, caches and predictions (outside git).
+  work_dir: D:/uls23/work

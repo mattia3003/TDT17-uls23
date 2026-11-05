@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tdt17-uls23"
+version = "0.1.0"
+description = "3D lesion segmentation on ULS23 with MONAI (TDT17 mini-project)"
+requires-python = ">=3.11,<3.13"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pyright]
+# MONAI re-exports its public API without __all__, which Pylance would otherwise flag as private imports.
+reportPrivateImportUsage = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

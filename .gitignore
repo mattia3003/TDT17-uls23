@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Data, caches, checkpoints and large outputs (never commit these)
+*.nii
+*.nii.gz
+*.mha
+*.nrrd
+*.zip
+*.pt
+*.pth
+*.ckpt
+runs/
+work/
+cache/
+
+# Keep data/ for small CSVs (e.g. manifest) only
+data/*
+!data/.gitkeep
+!data/*.csv
+
+# Slurm and local logs
+logs/*
+!logs/.gitkeep
