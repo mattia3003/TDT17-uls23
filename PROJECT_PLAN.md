@@ -215,7 +215,8 @@ Claude Code writes one analysis script and its Slurm job, and the student runs i
 - [x] Plot per-dataset lesion size and spacing distributions.
 - [x] Make a small gallery of mask overlays per dataset (small, median and large lesions).
 - [x] Measure the fraction of lesions that fit inside candidate crop sizes.
-- [ ] Fix the DeepLesion3D category reader (the categories are empty in the manifest), and redraw the figures kept for the video (D21).
+- [x] Fix the DeepLesion3D category reader (all 750 VOIs matched, D23).
+- [ ] Redraw the figures kept for the video (D21) with the per-lesion gallery window. This needs one more `--reuse-manifest` run on IDUN.
 
 **🚦 Gate 1: present and decide**
 

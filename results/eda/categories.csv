@@ -1,0 +1,8 @@
+dataset,category,n,lesion_mm3_median,lesion_hu_median
+ULS23_DeepLesion3D,Abdominal,199,585.04797288225,54.0
+ULS23_DeepLesion3D,Bone,100,586.8099818510022,484.5
+ULS23_DeepLesion3D,Kidney,50,521.240234375,79.75
+ULS23_DeepLesion3D,Liver,49,633.6447766052481,74.0
+ULS23_DeepLesion3D,Lung,97,425.3775844353274,52.0
+ULS23_DeepLesion3D,Mediastinal,99,1054.6875,50.0
+ULS23_DeepLesion3D,Other,149,1077.391165576434,49.0

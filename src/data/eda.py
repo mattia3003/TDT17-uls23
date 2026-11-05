@@ -64,7 +64,7 @@ def usable_mask(manifest: pd.DataFrame) -> pd.Series:
             & _geometry_ok(manifest) & (_numeric(manifest, "lesion_voxels") > 0))
 
 
-INTENSITY_COLUMNS = ["hu_p00_5", "hu_p50", "hu_p99_5", "lesion_hu_median"]
+INTENSITY_COLUMNS = ["hu_p00_5", "hu_p50", "hu_p99_5", "lesion_hu_median", "lesion_hu_p95"]
 
 
 def with_intensity_correction(manifest: pd.DataFrame, intensity_cfg: Mapping[str, Any]) -> pd.DataFrame:
@@ -346,23 +346,24 @@ def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path, quantile: floa
     if msk.any():
         ax.contour(np.rot90(msk), levels=[0.5], colors=CONTOUR, linewidths=1.2)
     ax.set_title(f"volume quantile {quantile:.2f}\n{row['case']}\n"
-                 f"{row['lesion_mm3']:.0f} mm³, Ø≈{row['lesion_eq_diam_mm']:.0f} mm",
+                 f"{row['lesion_mm3']:.0f} mm³, Ø≈{row['lesion_eq_diam_mm']:.0f} mm, "
+                 f"window {window[0]:g} to {window[1]:g} HU",
                  fontsize=8, fontweight="normal", color=INK_2)
     ax.set_axis_off()
 
 
 def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Sequence[float],
-                 windows: Mapping[str, Sequence[float]], data_root: Path, path: Path) -> pd.DataFrame:
+                 windows: Mapping[str, Any], data_root: Path, path: Path) -> pd.DataFrame:
     """Rows = datasets, columns = lesion-volume quantiles. Returns the chosen cases.
 
-    ``windows`` maps a dataset to its display window in HU, with ``default`` for the rest.
+    ``windows`` holds ``soft_tissue`` and ``bone`` display windows in HU; a panel uses the bone
+    window when the corrected 95th percentile inside its lesion is above ``bone_above_hu``.
     """
     fig, axes = plt.subplots(len(datasets), len(quantiles), figsize=(3 * len(quantiles), 3.6 * len(datasets)),
                              squeeze=False)
     chosen = []
     for r, ds in enumerate(datasets):
         group = usable[usable["dataset"] == ds]
-        window = windows.get(ds, windows["default"])
         for c, qtl in enumerate(quantiles):
             ax = axes[r, c]
             if group.empty:
@@ -371,10 +372,10 @@ def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Seque
             target = float(group["lesion_mm3"].quantile(qtl))
             row = group.iloc[int(np.argmin(np.abs(group["lesion_mm3"].to_numpy(float) - target)))]
             chosen.append({"dataset": ds, "quantile": qtl, "case": row["case"], "lesion_mm3": row["lesion_mm3"]})
-            _gallery_panel(ax, row, data_root, qtl, window)
-        lo, hi = window
-        axes[r, 0].text(-0.08, 0.5, f"{ds}\nwindow {lo:g} to {hi:g} HU", transform=axes[r, 0].transAxes,
-                        rotation=90, ha="right", va="center", color=INK, fontweight="bold")
+            is_bone = float(row["lesion_hu_p95_corrected"]) > float(windows["bone_above_hu"])
+            _gallery_panel(ax, row, data_root, qtl, windows["bone" if is_bone else "soft_tissue"])
+        axes[r, 0].text(-0.08, 0.5, ds, transform=axes[r, 0].transAxes, rotation=90,
+                        ha="right", va="center", color=INK, fontweight="bold")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)

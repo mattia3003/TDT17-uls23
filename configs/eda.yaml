@@ -16,6 +16,9 @@ eda:
   # Gallery: one axial slice through the lesion at these lesion-volume quantiles, per dataset.
   gallery_quantiles: [0.05, 0.5, 0.95]
   # Fixed display windows (low, high) in HU, applied after the offset correction (D17).
+  # Each panel uses the bone window when the 95th percentile inside its lesion is above
+  # bone_above_hu, i.e. when part of the lesion is bone-dense (also lytic lesions with a dense rim).
   gallery_windows:
-    default: [-160, 240]                 # soft tissue (width 400, level 40)
-    ULS23_Radboudumc_Bone: [-450, 1250]  # bone (width 1700, level 400)
+    soft_tissue: [-160, 240]   # width 400, level 40
+    bone: [-450, 1250]         # width 1700, level 400
+    bone_above_hu: 500

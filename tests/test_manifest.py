@@ -165,7 +165,7 @@ def test_build_manifest_and_report(synthetic_root: Path, tmp_path: Path) -> None
     manifest.to_csv(tmp_path / "manifest.csv", index=False)
     reread = pd.read_csv(tmp_path / "manifest.csv")
     eda_cfg = {"output_dir": str(tmp_path / "eda"), "crop_sizes": [[16, 16, 8]], "gallery_quantiles": [0.5],
-               "gallery_windows": {"default": [-160, 240]}}
+               "gallery_windows": {"soft_tissue": [-160, 240], "bone": [-450, 1250], "bone_above_hu": 500}}
     summary = write_report(reread, synthetic_root, eda_cfg, ["DS_A", "DS_B"], INTENSITY_CFG).set_index("dataset")
     assert summary.loc["ALL", "n_shifted_vois"] == 0  # synthetic VOIs have negative values
     for name in ["summary_per_dataset.csv", "crop_fit.csv", "problem_cases.csv", "categories.csv", "label_quality.csv",
