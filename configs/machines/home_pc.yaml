@@ -1,6 +1,7 @@
 # Machine config for the home PC (RTX 2080 Ti, 11 GB). Merged last, so it only holds machine-specific values.
 machine:
   name: home_pc
+  num_workers: 6  # CPU worker processes (data loading, analysis)
 
 paths:
   # TODO(after Gate 1): folder holding the copied ULS23 subset (same layout as on IDUN).

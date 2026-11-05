@@ -17,3 +17,8 @@ reportPrivateImportUsage = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# matplotlib 3.9 calls pyparsing APIs that newer pyparsing marks deprecated; harmless.
+filterwarnings = [
+    "ignore::DeprecationWarning:matplotlib\\..*",
+    "ignore::DeprecationWarning:pyparsing\\..*",
+]

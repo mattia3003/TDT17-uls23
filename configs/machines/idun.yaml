@@ -1,6 +1,7 @@
 # Machine config for NTNU IDUN. Merged last, so it only holds machine-specific values.
 machine:
   name: idun
+  num_workers: 8  # CPU worker processes; keep equal to #SBATCH --cpus-per-task
 
 paths:
   # Course copy of ULS23. Read-only: never write here.

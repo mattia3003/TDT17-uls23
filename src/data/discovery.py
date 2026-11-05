@@ -15,6 +15,14 @@ def is_image_file(name: str) -> bool:
     return name.lower().endswith(IMAGE_SUFFIXES)
 
 
+def strip_image_suffix(name: str) -> str:
+    """Return the case name: ``'x_lesion_01.nii.gz'`` -> ``'x_lesion_01'``."""
+    for suffix in IMAGE_SUFFIXES:
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
 def dataset_dirs(data_root: str | Path, data_cfg: Mapping[str, Any], dataset: str) -> tuple[Path, Path]:
     """Return ``(image_dir, label_dir)`` for ``dataset`` from the ``data`` config section."""
     root = Path(data_root)

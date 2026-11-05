@@ -1,9 +1,16 @@
 # ULS23 layout as found on IDUN (Phase 0). Paths are relative to paths.data_root;
-# {dataset} is replaced by each name in `datasets`. Images and labels pair by identical filename.
+# {dataset} is replaced by the dataset name. Images and labels pair by identical filename.
 data:
   image_dir: data/{dataset}/images
   label_dir: annotations/{dataset}/labels
   datasets:
-    - ULS23_DeepLesion3D
-    - ULS23_Radboudumc_Bone
-    - ULS23_Radboudumc_Pancreas
+    ULS23_DeepLesion3D:
+      # <patient>_<study>_<series>_<keyslice>_lesion_<nn> (DeepLesion naming)
+      id_pattern: '^(?P<patient>\d+)_\d+_\d+_\d+_lesion_(?P<lesion>\d+)$'
+      # Optional: sub-folders named by lesion type, each holding that type's cases.
+      category_dir: data/{dataset}/categories
+    ULS23_Radboudumc_Bone:
+      # bone_<case>_lesion_<nn>; <case> may be a patient or a single study (unknown).
+      id_pattern: '^bone_(?P<patient>\d+)_lesion_(?P<lesion>\d+)$'
+    ULS23_Radboudumc_Pancreas:
+      id_pattern: '^diag_pancreas_(?P<patient>\d+)_lesion_(?P<lesion>\d+)$'

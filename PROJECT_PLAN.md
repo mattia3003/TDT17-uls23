@@ -172,10 +172,10 @@ Other architectures, nnU-Net, hyperparameter searches, weakly annotated data, an
 
 ### Phase 0: Setup
 
-- [ ] Confirm where the work will run, and ask the student about their IDUN account and storage.
-- [ ] Create the Python environment and pin versions.
-- [ ] Create the repo structure from section 6 and initialize git.
-- [ ] Write a short Slurm test job that loads one VOI with MONAI on a GPU, for the student to submit.
+- [x] Confirm where the work will run, and ask the student about their IDUN account and storage.
+- [x] Create the Python environment and pin versions.
+- [x] Create the repo structure from section 6 and initialize git.
+- [x] Write a short Slurm test job that loads one VOI with MONAI on a GPU, for the student to submit. (Job 25934176 passed on a V100.)
 
 **Done when:** the student reports that the test job works.
 

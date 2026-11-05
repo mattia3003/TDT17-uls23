@@ -16,6 +16,14 @@ All external code, data and sources used in the project. Required by the project
 - PyTorch: https://pytorch.org
 - NiBabel, NumPy, SciPy, pandas, Matplotlib, PyYAML (see `requirements.txt` for versions)
 
+## Figures
+
+- The categorical colors in the figures are the first slots of the default palette in Claude Code's `dataviz` skill. They were checked for colorblind separation with its validator script.
+
+## Tools
+
+- Claude Code (Anthropic) was used as a coding assistant for the code, configs and documentation. All design decisions were reviewed by the student and are logged in `DECISIONS.md`.
+
 ## Compute
 
 - NTNU IDUN cluster documentation: https://www.hpc.ntnu.no/idun/
