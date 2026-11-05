@@ -44,7 +44,7 @@ IDUN is a Slurm cluster. You log in to a *login node* to edit files, install pac
    ```
    This project uses `share-ie-idi`. To avoid typing it on every submit, add `export SBATCH_ACCOUNT=share-ie-idi` to `~/.bashrc` (Slurm reads it automatically). GPU jobs use the `GPUQ` partition.
 3. **Storage:** code and the venv go in your home directory (`/cluster/home/$USER`). Large outputs go in `/cluster/work/$USER/tdt17-uls23` (`paths.work_dir` in `configs/machines/idun.yaml`). Neither home nor work is backed up, so GitHub is the backup for code. Check quota with `lfs quota -u $USER /cluster`. The dataset under `/cluster/projects/vc/courses/...` is read-only.
-4. **Get the code:** `git clone <your-github-repo-url> ~/tdt17-uls23` once the GitHub repo exists. Otherwise copy the folder with `scp -r`.
+4. **Get the code:** `git clone https://github.com/mattia3003/TDT17-uls23.git ~/tdt17-uls23`.
 5. **Python environment** (on the login node):
    ```bash
    module avail Python                  # pick a 3.11 version, then set PYTHON_MODULE in slurm/idun_env.sh
@@ -60,3 +60,34 @@ IDUN is a Slurm cluster. You log in to a *login node* to edit files, install pac
    squeue -u $USER                      # wait until it finishes
    cat logs/uls23-check-env-<jobid>.out
    ```
+
+## Working routine: PC and IDUN
+
+The PC repo is the master copy. All edits and commits happen there. The IDUN clone only runs code, and its outputs are copied back to the PC and committed from there.
+
+**Before every `git pull` on IDUN**, discard IDUN's copies of generated outputs. Otherwise git refuses to pull files that were committed from the PC:
+
+```bash
+cd ~/tdt17-uls23
+git checkout -- data results   # reset tracked outputs to the committed version
+git clean -n data results      # dry run: list untracked outputs that would be deleted
+git clean -f data results      # delete them (files covered by .gitignore are kept)
+git pull
+```
+
+**Before any long IDUN job,** run the same command locally on the real-file sample, which is seconds of work. The sample is 2 VOIs per dataset in `data/sample/ULS23`, gitignored, with the same folder layout as the course data. For example, for the EDA:
+
+```powershell
+python scripts/eda.py --config configs/data/uls23.yaml configs/eda.yaml --machine configs/machines/home_pc.yaml paths.data_root=data/sample/ULS23 eda.manifest_path=data/sample/manifest.csv eda.output_dir=data/sample/eda
+```
+
+**Copying results to the PC** (PowerShell, from the repo root). Give the full destination file name, because a trailing `\` before a closing quote breaks the path:
+
+```powershell
+scp mattiald@idun-login1.hpc.ntnu.no:~/tdt17-uls23/data/manifest.csv data/manifest.csv
+scp -r mattiald@idun-login1.hpc.ntnu.no:~/tdt17-uls23/results/eda results
+```
+
+**Light work on the login node is fine:** things that take seconds and read only a few files, such as `scripts/eda.py --reuse-manifest`. Use the same environment as the jobs: `source slurm/idun_env.sh`. Anything that reads the whole dataset, or uses a GPU, goes through `sbatch`.
+
+**Logging:** after every significant job, run `sacct -j <jobid> --format=JobID,Elapsed,State,AllocCPUS,MaxRSS` and add a row to `COMPUTE_LOG.md`, including for failed jobs.

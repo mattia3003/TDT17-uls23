@@ -216,7 +216,7 @@ Claude Code writes one analysis script and its Slurm job, and the student runs i
 - [x] Make a small gallery of mask overlays per dataset (small, median and large lesions).
 - [x] Measure the fraction of lesions that fit inside candidate crop sizes.
 - [x] Fix the DeepLesion3D category reader (all 750 VOIs matched, D23).
-- [ ] Redraw the figures kept for the video (D21) with the per-lesion gallery window. This needs one more `--reuse-manifest` run on IDUN.
+- [x] Redraw the figures kept for the video (D21) with the per-lesion gallery window (`--reuse-manifest` run on the IDUN login node).
 
 **🚦 Gate 1: present and decide**
 
@@ -227,6 +227,31 @@ Claude Code writes one analysis script and its Slurm job, and the student runs i
 Keep the 3–5 most useful figures for the video.
 
 ### Phase 2: Pipeline
+
+> **Status (end of session, 2026-11-05):**
+> - *Done:* Phase 0 and Phase 1 are complete, and the Gate 1 decisions are D14–D23 in `DECISIONS.md`. The video figures are in `results/eda/`.
+> - *Ready:* the real-file sample is in `data/sample/ULS23`, and the PC↔IDUN routine is in `README.md`. The official split file is pinned in `REFERENCES.md` (commit and SHA-256).
+>
+> **Build order for Phase 2.** Test each step on synthetic data, then on the real-file sample, before any IDUN job.
+> 1. `src/utils/seed.py`, the central seeding function. Then `scripts/make_splits.py`, which downloads the official split, checks its SHA-256, takes our test cases from it and builds a patient-grouped validation split (about 15 %, own seed). It writes `splits/uls23_splits.csv` and checks that no patient is in two splits.
+> 2. Config-driven MONAI transforms:
+>    - load
+>    - the offset correction from `src/data/intensity.py` (D17)
+>    - clip to [−1000, 1500] and scale to [0, 1] (D18)
+>    - 128×128×64 patch sampling (D19)
+>    - light augmentation
+>
+>    Optional `PersistentDataset` caching. A model factory: DynUNet 3D, with 2D possible.
+> 3. `scripts/train.py`: mixed precision, checkpoint and resume, CSV logging, the resolved config, seed and git commit saved with each run, and `nvidia-smi` power sampling.
+> 4. `scripts/evaluate.py`: sliding-window prediction on the full VOI, and a per-lesion CSV. It carries the columns for the E3 breakdowns: dataset, size, slice spacing, `intensity_group` and category.
+> 5. E0 (overfit a few VOIs) and a short timing comparison between the PC and IDUN. These are run by the student.
+>
+> **Open choices to present when they come up:**
+> - patch sampling ratio (lesion-centred vs random patches)
+> - which augmentations
+> - epochs and learning-rate schedule
+> - batch size per machine
+> - whether the home PC gets a copy of the training data (DeepLesion3D + Bone is 14.3 GB, Pancreas 1.6 GB). `configs/machines/home_pc.yaml` still has placeholder paths.
 
 - [ ] Write the central seeding function and the config loader.
 - [ ] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
