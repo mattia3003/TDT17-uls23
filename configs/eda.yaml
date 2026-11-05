@@ -2,6 +2,9 @@
 eda:
   manifest_path: data/manifest.csv
   output_dir: results/eda
+  # Stop the job if more than this fraction of the first `check_after` cases cannot be read.
+  check_after: 50
+  max_error_fraction: 0.05
   # Candidate training crops (x, y, z voxels) for the "does the lesion fit?" analysis.
   crop_sizes:
     - [64, 64, 32]

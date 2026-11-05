@@ -15,7 +15,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-from src.data.manifest import load_nifti
+from src.data.manifest import load_nifti, spatial_array
 
 # Validated categorical palette (fixed order, never cycled) and neutral inks; see REFERENCES.md.
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
@@ -53,10 +53,14 @@ def _numeric(frame: pd.DataFrame, name: str) -> pd.Series:
     return pd.Series(pd.to_numeric(_column(frame, name), errors="coerce"), index=frame.index).fillna(0)
 
 
+def _geometry_ok(manifest: pd.DataFrame) -> pd.Series:
+    return _column(manifest, "label_geometry_match").isin([True, "True"])
+
+
 def usable_mask(manifest: pd.DataFrame) -> pd.Series:
-    """Cases with an image, a non-empty label and no read error."""
+    """Cases with an image, a non-empty label on the same voxel grid and no read error."""
     return (_has(manifest["image"]) & _has(manifest["label"]) & ~_has(_column(manifest, "error"))
-            & (_numeric(manifest, "lesion_voxels") > 0))
+            & _geometry_ok(manifest) & (_numeric(manifest, "lesion_voxels") > 0))
 
 
 def dataset_colors(datasets: Sequence[str]) -> dict[str, str]:
@@ -69,7 +73,7 @@ def dataset_colors(datasets: Sequence[str]) -> dict[str, str]:
 def _summarise(group: pd.DataFrame) -> dict[str, Any]:
     usable = group[usable_mask(group)]
     per_patient = usable.groupby("patient_id").size()
-    q = lambda col, p: float(usable[col].quantile(p)) if len(usable) else float("nan")  # noqa: E731
+    q = lambda col, p: float(_column(usable, col).quantile(p)) if len(usable) else float("nan")  # noqa: E731
     errors = _column(group, "error")
     return {
         "n_images": int(_has(group["image"]).sum()),
@@ -95,13 +99,22 @@ def _summarise(group: pd.DataFrame) -> dict[str, Any]:
         "lesion_hu_median_p95": q("lesion_hu_median", 0.95),
         "image_min_median": q("image_min", 0.5),
         "pad_fraction_median": q("pad_fraction", 0.5),
-        "frac_touches_border": _bool_frac(usable["touches_border"]),
-        "frac_center_in_lesion": _bool_frac(usable["center_in_lesion"]),
-        "frac_multi_component": float((usable["n_components"] > 1).mean()) if len(usable) else float("nan"),
-        "frac_label_nonbinary": float((usable["label_n_values"] > 2).mean()) if len(usable) else float("nan"),
-        "frac_geometry_mismatch": 1.0 - _bool_frac(usable["label_geometry_match"]),
-        "axcodes": "|".join(sorted(usable["axcodes"].dropna().astype(str).unique())),
-        "disk_dtypes": "|".join(sorted(usable["disk_dtype"].dropna().astype(str).unique())),
+        "frac_touches_border": _bool_frac(_column(usable, "touches_border")),
+        "frac_center_in_lesion": _bool_frac(_column(usable, "center_in_lesion")),
+        "frac_multi_component": float((_column(usable, "n_components") > 1).mean()) if len(usable) else float("nan"),
+        "frac_label_nonbinary": float((_column(usable, "label_n_values") > 2).mean()) if len(usable) else float("nan"),
+        "frac_holes_2d": float((_numeric(usable, "hole_voxels_2d") > 0).mean()) if len(usable) else float("nan"),
+        "frac_holes_3d": float((_numeric(usable, "hole_voxels_3d") > 0).mean()) if len(usable) else float("nan"),
+        "frac_single_slice": float((_numeric(usable, "extent_vox_z") == 1).mean()) if len(usable) else float("nan"),
+        "contrast_hu_p05": q("lesion_shell_contrast_hu", 0.05),
+        "contrast_hu_median": q("lesion_shell_contrast_hu", 0.5),
+        "contrast_hu_p95": q("lesion_shell_contrast_hu", 0.95),
+        "n_geometry_mismatch": int((_has(group["label"]) & ~_has(errors) & ~_geometry_ok(group)
+                                    & (_numeric(group, "lesion_voxels") > 0)).sum()),
+        "ndim_on_disk": "|".join(sorted(str(int(v)) for v in pd.concat(
+            [_column(group, "image_ndim_disk"), _column(group, "label_ndim_disk")]).dropna().unique())),
+        "axcodes": "|".join(sorted(_column(usable, "axcodes").dropna().astype(str).unique())),
+        "disk_dtypes": "|".join(sorted(_column(usable, "disk_dtype").dropna().astype(str).unique())),
         "disk_gb": float((_numeric(group, "image_mb") + _numeric(group, "label_mb")).sum() / 1000),
     }
 
@@ -118,13 +131,27 @@ def problem_cases(manifest: pd.DataFrame) -> pd.DataFrame:
     errors = _column(manifest, "error", "")
     read_error = errors.fillna("").astype(str).map(lambda e: f"read error: {e}")
     reason = np.select(
-        [~_has(manifest["image"]), ~_has(manifest["label"]), _has(errors)],
-        ["missing image", "missing label", read_error],
+        [~_has(manifest["image"]), ~_has(manifest["label"]), _has(errors), ~_geometry_ok(manifest)],
+        ["missing image", "missing label", read_error, "label/image geometry mismatch"],
         default="empty label",
     )
     out = manifest.loc[~usable_mask(manifest), ["dataset", "case"]].copy()
     out["reason"] = reason[~usable_mask(manifest).to_numpy()]
     return out.reset_index(drop=True)
+
+
+def label_quality_table(manifest: pd.DataFrame) -> pd.DataFrame:
+    """Per usable case: label-quality indicators, most holes first within each dataset.
+
+    ``flatness`` is the smallest over the largest physical extent (1 = as long as wide as deep).
+    """
+    usable = manifest[usable_mask(manifest)]
+    extent = usable[["extent_mm_x", "extent_mm_y", "extent_mm_z"]].to_numpy(float)
+    out = usable[["dataset", "case", "lesion_mm3", "extent_vox_z"]].copy()
+    for col in ["n_components", "hole_voxels_2d", "hole_voxels_3d", "lesion_shell_contrast_hu"]:
+        out[col] = _column(usable, col)
+    out["flatness"] = extent.min(axis=1) / extent.max(axis=1) if len(usable) else []
+    return out.sort_values(["dataset", "hole_voxels_2d"], ascending=[True, False]).reset_index(drop=True)
 
 
 def crop_fit(manifest: pd.DataFrame, crop_sizes: Sequence[Sequence[int]], datasets: Sequence[str]) -> pd.DataFrame:
@@ -241,10 +268,10 @@ def plot_crop_fit(fit: pd.DataFrame, datasets: Sequence[str], colors: Mapping[st
     plt.close(fig)
 
 
-def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path) -> None:
+def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path, quantile: float) -> None:
     """Axial slice with the largest lesion area, zoomed around the lesion, with the mask contour."""
-    image = np.asarray(load_nifti(data_root / row["image"])[0].dataobj, dtype=np.float32)
-    mask = np.asarray(load_nifti(data_root / row["label"])[0].dataobj) > 0
+    image = spatial_array(load_nifti(data_root / row["image"])[0], dtype=np.float32)
+    mask = spatial_array(load_nifti(data_root / row["label"])[0]) > 0
     z = int(mask.sum(axis=(0, 1)).argmax())
     lo = np.array([row["bbox_lo_x"], row["bbox_lo_y"]], dtype=int)
     hi = np.array([row["bbox_hi_x"], row["bbox_hi_y"]], dtype=int)
@@ -258,7 +285,8 @@ def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path) -> None:
     ax.imshow(np.rot90(img), cmap="gray", vmin=vmin, vmax=vmax)
     if msk.any():
         ax.contour(np.rot90(msk), levels=[0.5], colors=CONTOUR, linewidths=1.2)
-    ax.set_title(f"{row['case']}\n{row['lesion_mm3']:.0f} mm³, Ø≈{row['lesion_eq_diam_mm']:.0f} mm",
+    ax.set_title(f"volume quantile {quantile:.2f}\n{row['case']}\n"
+                 f"{row['lesion_mm3']:.0f} mm³, Ø≈{row['lesion_eq_diam_mm']:.0f} mm",
                  fontsize=8, fontweight="normal", color=INK_2)
     ax.set_axis_off()
 
@@ -266,7 +294,7 @@ def _gallery_panel(ax: plt.Axes, row: pd.Series, data_root: Path) -> None:
 def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Sequence[float],
                  data_root: Path, path: Path) -> pd.DataFrame:
     """Rows = datasets, columns = lesion-volume quantiles. Returns the chosen cases."""
-    fig, axes = plt.subplots(len(datasets), len(quantiles), figsize=(3 * len(quantiles), 3.2 * len(datasets)),
+    fig, axes = plt.subplots(len(datasets), len(quantiles), figsize=(3 * len(quantiles), 3.6 * len(datasets)),
                              squeeze=False)
     chosen = []
     for r, ds in enumerate(datasets):
@@ -279,12 +307,9 @@ def plot_gallery(usable: pd.DataFrame, datasets: Sequence[str], quantiles: Seque
             target = float(group["lesion_mm3"].quantile(qtl))
             row = group.iloc[int(np.argmin(np.abs(group["lesion_mm3"].to_numpy(float) - target)))]
             chosen.append({"dataset": ds, "quantile": qtl, "case": row["case"], "lesion_mm3": row["lesion_mm3"]})
-            _gallery_panel(ax, row, data_root)
+            _gallery_panel(ax, row, data_root, qtl)
         axes[r, 0].text(-0.08, 0.5, ds, transform=axes[r, 0].transAxes, rotation=90,
                         ha="right", va="center", color=INK, fontweight="bold")
-    for c, qtl in enumerate(quantiles):
-        axes[0, c].annotate(f"volume quantile {qtl:.2f}", (0.5, 1.25), xycoords="axes fraction",
-                            ha="center", color=INK, fontweight="bold")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -302,6 +327,7 @@ def write_report(manifest: pd.DataFrame, data_root: str | Path, eda_cfg: Mapping
     summary = dataset_summary(manifest, datasets)
     summary.to_csv(out / "summary_per_dataset.csv", index=False)
     problem_cases(manifest).to_csv(out / "problem_cases.csv", index=False)
+    label_quality_table(manifest).to_csv(out / "label_quality.csv", index=False)
     fit = crop_fit(manifest, eda_cfg["crop_sizes"], datasets)
     fit.to_csv(out / "crop_fit.csv", index=False)
     if "category" in usable:

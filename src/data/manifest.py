@@ -23,6 +23,8 @@ from src.data.discovery import dataset_dirs, is_image_file, strip_image_suffix
 
 # Below this fraction of voxels at the VOI minimum we treat the VOI as unpadded.
 PAD_FRACTION_THRESHOLD = 0.01
+# Thickness (voxels) of the shell around the lesion used for the lesion-vs-surroundings contrast.
+SHELL_VOXELS = 3
 
 
 def load_nifti(path: str | Path) -> tuple[nib.Nifti1Image, nib.Nifti1Header]:
@@ -34,6 +36,19 @@ def load_nifti(path: str | Path) -> tuple[nib.Nifti1Image, nib.Nifti1Header]:
 def header_affine(header: nib.Nifti1Header) -> np.ndarray:
     """Voxel-to-world affine stored in the header (sform/qform), as a plain array."""
     return cast(np.ndarray, header.get_best_affine())
+
+
+def spatial_array(image: nib.Nifti1Image, dtype: Any = None) -> np.ndarray:
+    """Voxel data as a 3-D array; trailing size-1 axes (e.g. a stored ``(x, y, z, 1)``) are dropped.
+
+    MONAI's ``EnsureChannelFirst`` hides such an axis, plain nibabel does not.
+    """
+    data = np.asarray(image.dataobj, dtype=dtype)
+    while data.ndim > 3 and data.shape[-1] == 1:
+        data = data[..., 0]
+    if data.ndim != 3:
+        raise ValueError(f"expected a 3-D volume, got shape {data.shape}")
+    return data
 
 
 def parse_case_id(case: str, pattern: str | None) -> tuple[str, bool]:
@@ -96,11 +111,12 @@ def _xyz(prefix: str, values: Iterable[float]) -> dict[str, float]:
 def voi_stats(image_path: Path, label_path: Path | None) -> dict[str, Any]:
     """Geometry, padding, intensity and lesion statistics for one VOI (array axes x, y, z)."""
     image_nii, header = load_nifti(image_path)
-    image = np.asarray(image_nii.dataobj, dtype=np.float32)
+    image = spatial_array(image_nii, dtype=np.float32)
     spacing = np.array(header.get_zooms()[:3], dtype=float)
     slope, inter = header.get_slope_inter()
     stats: dict[str, Any] = {
         **_xyz("shape", image.shape),
+        "image_ndim_disk": len(image_nii.shape),
         **_xyz("spacing", spacing),
         "axcodes": "".join(nib.aff2axcodes(header_affine(header))),
         "disk_dtype": str(image_nii.get_data_dtype()),
@@ -121,11 +137,15 @@ def voi_stats(image_path: Path, label_path: Path | None) -> dict[str, Any]:
         return stats
 
     label_nii, label_header = load_nifti(label_path)
-    label = np.asarray(label_nii.dataobj)
-    same_affine = np.allclose(header_affine(label_header), header_affine(header), atol=1e-3)
+    label = spatial_array(label_nii)
+    same_shape = label.shape == image.shape
+    same_affine = bool(np.allclose(header_affine(label_header), header_affine(header), atol=1e-3))
     stats.update(
         label_mb=os.path.getsize(label_path) / 1e6,
-        label_geometry_match=bool(label.shape == image.shape and same_affine),
+        label_ndim_disk=len(label_nii.shape),
+        label_shape_match=same_shape,
+        label_affine_match=same_affine,
+        label_geometry_match=same_shape and same_affine,
         label_n_values=int(np.unique(label).size),
         label_max=float(label.max()),
     )
@@ -156,8 +176,39 @@ def voi_stats(image_path: Path, label_path: Path | None) -> dict[str, Any]:
         lesion_hu_median=float(np.median(lesion_hu)),
         lesion_hu_p05=float(np.percentile(lesion_hu, 5)),
         lesion_hu_p95=float(np.percentile(lesion_hu, 95)),
+        **label_quality(image, mask, ~at_min, lo, hi),
     )
     return stats
+
+
+def _fill_holes(mask: np.ndarray) -> np.ndarray:
+    return cast(np.ndarray, ndimage.binary_fill_holes(mask))
+
+
+def label_quality(image: np.ndarray, mask: np.ndarray, body: np.ndarray,
+                  lo: np.ndarray, hi: np.ndarray) -> dict[str, Any]:
+    """Indicators of possibly odd labels, computed in a crop around the lesion bounding box.
+
+    Holes are counted per axial slice (catches holes that are open along z) and in 3-D.
+    The contrast is the median intensity in the lesion minus that in a thin shell around it,
+    leaving out padding.
+    """
+    start = np.maximum(lo - SHELL_VOXELS - 1, 0)
+    stop = np.minimum(hi + SHELL_VOXELS + 2, mask.shape)
+    region = tuple(slice(a, b) for a, b in zip(start, stop))
+    sub_mask = mask[region]
+    n_voxels = int(sub_mask.sum())
+    filled_2d = np.stack([_fill_holes(sub_mask[:, :, k]) for k in range(sub_mask.shape[2])], axis=2)
+    dilated = cast(np.ndarray, ndimage.binary_dilation(sub_mask, iterations=SHELL_VOXELS))
+    shell = dilated & ~sub_mask & body[region]
+    shell_hu = image[region][shell]
+    shell_median = float(np.median(shell_hu)) if shell_hu.size else float("nan")
+    return {
+        "hole_voxels_2d": int(filled_2d.sum()) - n_voxels,
+        "hole_voxels_3d": int(_fill_holes(sub_mask).sum()) - n_voxels,
+        "shell_hu_median": shell_median,
+        "lesion_shell_contrast_hu": float(np.median(image[region][sub_mask])) - shell_median,
+    }
 
 
 def _safe_voi_stats(paths: tuple[Path | None, Path | None]) -> dict[str, Any]:
@@ -171,9 +222,22 @@ def _safe_voi_stats(paths: tuple[Path | None, Path | None]) -> dict[str, Any]:
         return {"error": f"{type(err).__name__}: {err}"}
 
 
+def _check_errors(results: list[dict[str, Any]], max_error_fraction: float) -> None:
+    """Raise if too many of the cases so far failed, so a systematic bug stops the job early."""
+    errors = [r["error"] for r in results if "error" in r and r["error"] != "no image"]
+    if len(errors) > max_error_fraction * len(results):
+        raise RuntimeError(f"{len(errors)} of the first {len(results)} cases failed "
+                           f"(limit {max_error_fraction:.0%}); first error: {errors[0]}")
+
+
 def build_manifest(data_root: str | Path, data_cfg: Mapping[str, Any], num_workers: int = 1,
-                   progress_every: int = 100) -> pd.DataFrame:
-    """List all configured datasets and compute per-VOI statistics in parallel."""
+                   progress_every: int = 100, check_after: int = 50,
+                   max_error_fraction: float = 0.05) -> pd.DataFrame:
+    """List all configured datasets and compute per-VOI statistics in parallel.
+
+    After the first ``check_after`` cases the job stops if more than ``max_error_fraction``
+    of them could not be read, so a systematic bug fails in minutes instead of hours.
+    """
     root = Path(data_root)
     cases = pd.concat([list_cases(root, data_cfg, ds) for ds in data_cfg["datasets"]], ignore_index=True)
     tasks = [(root / img if img else None, root / lab if lab else None)
@@ -183,6 +247,10 @@ def build_manifest(data_root: str | Path, data_cfg: Mapping[str, Any], num_worke
     with Pool(num_workers) as pool:
         for i, stats in enumerate(pool.imap(_safe_voi_stats, tasks, chunksize=4), start=1):
             results.append(stats)
+            if i == min(check_after, len(tasks)):
+                _check_errors(results, max_error_fraction)
             if i % progress_every == 0 or i == len(tasks):
                 print(f"  {i}/{len(tasks)}", flush=True)
+    n_errors = sum("error" in r for r in results)
+    print(f"Read errors: {n_errors} of {len(results)} cases (details in the 'error' column)")
     return pd.concat([cases, pd.DataFrame(results)], axis=1)

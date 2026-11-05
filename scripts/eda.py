@@ -36,7 +36,9 @@ def main() -> None:
     if args.reuse_manifest:
         manifest = pd.read_csv(manifest_path)
     else:
-        manifest = build_manifest(data_root, cfg["data"], num_workers=cfg["machine"]["num_workers"])
+        manifest = build_manifest(data_root, cfg["data"], num_workers=cfg["machine"]["num_workers"],
+                                  check_after=cfg["eda"]["check_after"],
+                                  max_error_fraction=cfg["eda"]["max_error_fraction"])
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest.to_csv(manifest_path, index=False)
         print(f"Wrote {manifest_path} ({len(manifest)} rows)")

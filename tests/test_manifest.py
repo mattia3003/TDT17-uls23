@@ -92,6 +92,46 @@ def test_voi_stats_on_synthetic_voi(tmp_path: Path) -> None:
     assert stats["label_geometry_match"]
     assert stats["lesion_hu_median"] == pytest.approx(100.0)
     assert (stats["spacing_x"], stats["spacing_z"]) == (0.5, 2.0)
+    assert (stats["hole_voxels_2d"], stats["hole_voxels_3d"]) == (0, 0)
+    assert stats["lesion_shell_contrast_hu"] == pytest.approx(100.0 - 40.0)  # padding left out of the shell
+
+
+def test_label_quality_counts_holes_open_along_z(tmp_path: Path) -> None:
+    image, label = make_voi(lesion_size=6)
+    label[16, 16, :] = 0  # a 1-voxel tunnel through the cube: a hole in each slice, not in 3-D
+    write_nifti(tmp_path / "img.nii.gz", image)
+    write_nifti(tmp_path / "lab.nii.gz", label)
+    stats = voi_stats(tmp_path / "img.nii.gz", tmp_path / "lab.nii.gz")
+    assert (stats["hole_voxels_2d"], stats["hole_voxels_3d"]) == (2, 0)
+
+
+@pytest.mark.parametrize("image_4d, label_4d", [(True, True), (True, False), (False, True)])
+def test_voi_stats_drops_trailing_singleton_axis(tmp_path: Path, image_4d: bool, label_4d: bool) -> None:
+    # Files stored as (x, y, z, 1) must give the same statistics as plain 3-D files.
+    image, label = make_voi(lesion_size=4)
+    write_nifti(tmp_path / "img.nii.gz", image[..., None] if image_4d else image)
+    write_nifti(tmp_path / "lab.nii.gz", label[..., None] if label_4d else label)
+    stats = voi_stats(tmp_path / "img.nii.gz", tmp_path / "lab.nii.gz")
+    assert (stats["image_ndim_disk"], stats["label_ndim_disk"]) == (4 if image_4d else 3, 4 if label_4d else 3)
+    assert stats["label_geometry_match"]
+    assert stats["n_components"] == 1
+    assert stats["lesion_hu_median"] == pytest.approx(100.0)
+
+
+def test_voi_stats_flags_geometry_mismatch(tmp_path: Path) -> None:
+    image, label = make_voi()
+    write_nifti(tmp_path / "img.nii.gz", image)
+    write_nifti(tmp_path / "lab.nii.gz", label[:, :, :8])
+    stats = voi_stats(tmp_path / "img.nii.gz", tmp_path / "lab.nii.gz")
+    assert not stats["label_shape_match"] and not stats["label_geometry_match"]
+    assert "lesion_hu_median" not in stats
+
+
+def test_build_manifest_fails_fast_on_systematic_errors(synthetic_root: Path) -> None:
+    for label in (synthetic_root / "annotations").rglob("*.nii.gz"):
+        label.write_bytes(b"not a nifti")
+    with pytest.raises(RuntimeError, match="cases failed"):
+        build_manifest(synthetic_root, DATA_CFG, num_workers=1)
 
 
 def test_list_cases_pairs_ids_and_categories(synthetic_root: Path) -> None:
@@ -123,6 +163,6 @@ def test_build_manifest_and_report(synthetic_root: Path, tmp_path: Path) -> None
     reread = pd.read_csv(tmp_path / "manifest.csv")
     eda_cfg = {"output_dir": str(tmp_path / "eda"), "crop_sizes": [[16, 16, 8]], "gallery_quantiles": [0.5]}
     write_report(reread, synthetic_root, eda_cfg, ["DS_A", "DS_B"])
-    for name in ["summary_per_dataset.csv", "crop_fit.csv", "problem_cases.csv", "categories.csv",
+    for name in ["summary_per_dataset.csv", "crop_fit.csv", "problem_cases.csv", "categories.csv", "label_quality.csv",
                  "lesion_size.png", "spacing.png", "lesion_hu.png", "padding.png", "crop_fit.png", "gallery.png"]:
         assert (tmp_path / "eda" / name).is_file(), name
