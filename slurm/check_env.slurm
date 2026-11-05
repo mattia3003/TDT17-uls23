@@ -1,6 +1,6 @@
 #!/bin/bash
 # Phase 0 GPU check: loads one ULS23 VOI with MONAI and runs one DynUNet step.
-# Submit from the repo root:  sbatch --account=<your-account> slurm/check_env.slurm
+# Submit from the repo root:  sbatch slurm/check_env.slurm  (account from $SBATCH_ACCOUNT, or add --account=share-ie-idi)
 #SBATCH --job-name=uls23-check-env
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:1

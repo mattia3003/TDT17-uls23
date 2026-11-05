@@ -138,19 +138,22 @@ def main() -> None:
     device = report_gpu()
 
     roi = tuple(args.roi)
-    if args.no_data:
+    pair: tuple[Path, Path] | None = None
+    if args.image:
+        pair = (args.image, args.label)
+    elif not args.no_data:
+        data_root = Path(cfg["paths"]["data_root"])
+        print(f"\nData tree (top levels) under {data_root}:")
+        print("\n".join(describe_tree(data_root, max_depth=3)))
+        pair = find_first_pair(data_root)
+        if pair is None:
+            print("\nWARNING  no images/ + labels/ pair found; GPU step uses synthetic data. "
+                  "Share the tree above so the layout can be mapped.")
+
+    if pair is None:
         image = torch.randn(1, *roi)
         label = (torch.rand(1, *roi) > 0.95).float()
     else:
-        if args.image:
-            pair = (args.image, args.label)
-        else:
-            data_root = Path(cfg["paths"]["data_root"])
-            print(f"\nData tree (top levels) under {data_root}:")
-            print("\n".join(describe_tree(data_root, max_depth=3)))
-            pair = find_first_pair(data_root)
-            if pair is None:
-                sys.exit("\nNo images/ + labels/ pair found; share the tree above so the layout can be mapped.")
         print()
         image, label = load_voi(*pair)
         crop = ResizeWithPadOrCrop(roi)

@@ -38,13 +38,13 @@ IDUN is a Slurm cluster. You log in to a *login node* to edit files, install pac
    sacctmgr show assoc where user=$USER format=account%30,partition%20
    sinfo -s
    ```
-   Use the account in `sbatch --account=<account>`. The GPU partition is expected to be `GPUQ`.
-3. **Storage:** code and the venv go in your home directory (`~`). Large outputs go in `/cluster/work/$USER/tdt17-uls23` (`paths.work_dir` in `configs/machines/idun.yaml`). The dataset under `/cluster/projects/vc/courses/...` is read-only.
+   This project uses `share-ie-idi`. To avoid typing it on every submit, add `export SBATCH_ACCOUNT=share-ie-idi` to `~/.bashrc` (Slurm reads it automatically). GPU jobs use the `GPUQ` partition.
+3. **Storage:** code and the venv go in your home directory (`/cluster/home/$USER`). Large outputs go in `/cluster/work/$USER/tdt17-uls23` (`paths.work_dir` in `configs/machines/idun.yaml`). Neither home nor work is backed up, so GitHub is the backup for code. Check quota with `lfs quota -u $USER /cluster`. The dataset under `/cluster/projects/vc/courses/...` is read-only.
 4. **Get the code:** `git clone <your-github-repo-url> ~/tdt17-uls23` once the GitHub repo exists. Otherwise copy the folder with `scp -r`.
 5. **Python environment** (on the login node):
    ```bash
-   module spider Python/3.11            # pick a version, then set PYTHON_MODULE in slurm/idun_env.sh
-   module load Python/3.11.5-GCCcore-13.2.0
+   module avail Python                  # pick a 3.11 version, then set PYTHON_MODULE in slurm/idun_env.sh
+   module load Python/3.11.3-GCCcore-12.3.0
    python -m venv ~/venvs/uls23
    source ~/venvs/uls23/bin/activate
    cd ~/tdt17-uls23
@@ -52,7 +52,7 @@ IDUN is a Slurm cluster. You log in to a *login node* to edit files, install pac
    ```
 6. **GPU check job** (from the repo root):
    ```bash
-   sbatch --account=<account> slurm/check_env.slurm
+   sbatch slurm/check_env.slurm         # or: sbatch --account=share-ie-idi slurm/check_env.slurm
    squeue -u $USER                      # wait until it finishes
    cat logs/uls23-check-env-<jobid>.out
    ```
