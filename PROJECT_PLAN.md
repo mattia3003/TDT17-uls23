@@ -190,6 +190,8 @@ The student decides at Gate 2 whether to run this, and can make the final call o
 - **Reference point:** quote the paper's per-lesion-type numbers (section 3) next to E1 for Bone, and as an upper reference for E2 Pancreas, with their caveats.
 - **Output:** save a per-lesion CSV, so new analyses don't require re-running inference.
 - **Selection:** use the validation split for model and threshold selection.
+- **Test data (D15):** the official challenge test set is hidden. "Test" therefore means the held-out cases of the public data in the official split, as in the paper's Table 2: about 10 % of each dataset, patient-grouped, used once at the end. It gives a development estimate, not a challenge score. The released ULS23 baseline weights were trained on these cases and must not be used on them.
+- **Post-processing (D30):** report Dice with and without keeping only the predicted component at the VOI centre.
 
 ### Out of scope unless the student asks
 
@@ -253,13 +255,15 @@ Keep the 3–5 most useful figures for the video.
 > - batch size per machine
 > - whether the home PC gets a copy of the training data (DeepLesion3D + Bone is 14.3 GB, Pancreas 1.6 GB). `configs/machines/home_pc.yaml` still has placeholder paths.
 
-- [ ] Write the central seeding function and the config loader.
-- [ ] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
-- [ ] Write config-driven MONAI transforms and a model factory that supports 2D and 3D.
-- [ ] Cache the deterministic part of preprocessing (load, offset correction, clipping and scaling) with MONAI's `PersistentDataset`, in the work directory. Measure during E0 whether data loading is a bottleneck; if not, caching can stay off.
+> **Progress (2026-11-06):** build steps 1–2 are done (D24–D27). `splits/uls23_splits.csv` is generated. The transforms passed the real-file check on `data/sample`. 41 tests pass. The choices on sampling, augmentation, post-processing and home-PC data were confirmed as D28–D31, and the test-split justification was added to D15. Next is step 3, `train.py`.
+
+- [x] Write the central seeding function and the config loader.
+- [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
+- [x] Write config-driven MONAI transforms and a model factory that supports 2D and 3D.
+- [ ] Cache the deterministic part of preprocessing (load, offset correction, clipping and scaling) with MONAI's `PersistentDataset`, in the work directory. Measure during E0 whether data loading is a bottleneck; if not, caching can stay off. *(Implemented, `cache.enabled`; the E0 measurement is still to come.)*
 - [ ] Write a training script with mixed precision, checkpoint and resume, and CSV logging. Each run saves its resolved config, seed and git commit.
 - [ ] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space.
-- [ ] Test the metrics on synthetic masks, and test that the same seed gives the same splits.
+- [ ] Test the metrics on synthetic masks, and test that the same seed gives the same splits. *(Split part done, in `tests/test_splits.py`.)*
 - [ ] Write a script that saves qualitative examples.
 - [ ] Add compute logging inside the training code, so it works on both machines: elapsed time and `nvidia-smi` power samples. Use `sacct` as an extra check on IDUN.
 - [ ] Keep Slurm scripts as thin wrappers around the same `train.py` command used locally. Use a separate path config for each machine.

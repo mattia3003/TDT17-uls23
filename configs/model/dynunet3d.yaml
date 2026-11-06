@@ -1,0 +1,12 @@
+# E1: 3-D DynUNet (nnU-Net style). For a 128x128x64 patch the encoder halves x/y five times and
+# z four times (the last stride is [2, 2, 1]), giving a 4x4x4 bottleneck.
+model:
+  name: dynunet
+  spatial_dims: 3
+  in_channels: 1
+  out_channels: 2  # background, lesion (softmax)
+  kernel_size: [3, 3, 3, 3, 3, 3]
+  strides: [1, 2, 2, 2, 2, [2, 2, 1]]
+  filters: [32, 64, 128, 256, 320, 320]  # nnU-Net default widths
+  norm_name: instance
+  deep_supervision: false

@@ -1,0 +1,22 @@
+# Shared training defaults. Experiment configs (configs/experiments/) override these.
+seed: 42             # training seed; the splits have their own (splits.seed)
+deterministic: true  # cuDNN deterministic algorithms, no auto-tuning (see src/utils/seed.py)
+
+transforms:
+  patch_size: [128, 128, 64]  # D19
+  # Random patches per loaded VOI. Loading and decompressing a VOI is the slow step, so it is reused.
+  samples_per_volume: 2
+  # Light augmentation; any MONAI dictionary transform can be listed: {name: <class>, <arguments>}.
+  # In-plane spacing is the same in x and y, so 90-degree rotations stay on the native grid.
+  augment:
+    - {name: RandFlipd, keys: [image, label], prob: 0.5, spatial_axis: 0}
+    - {name: RandFlipd, keys: [image, label], prob: 0.5, spatial_axis: 1}
+    - {name: RandFlipd, keys: [image, label], prob: 0.5, spatial_axis: 2}
+    - {name: RandRotate90d, keys: [image, label], prob: 0.5, max_k: 3, spatial_axes: [0, 1]}
+    - {name: RandScaleIntensityd, keys: image, prob: 0.3, factors: 0.1}   # contrast +-10 %
+    - {name: RandShiftIntensityd, keys: image, prob: 0.3, offsets: 0.02}  # +-0.02 = +-50 HU
+
+cache:
+  # Store the deterministic preprocessing under paths.work_dir/cache/<hash> (PersistentDataset).
+  # Off unless E0 shows that data loading is the bottleneck (D22).
+  enabled: false

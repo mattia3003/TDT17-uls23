@@ -21,4 +21,6 @@ testpaths = ["tests"]
 filterwarnings = [
     "ignore::DeprecationWarning:matplotlib\\..*",
     "ignore::DeprecationWarning:pyparsing\\..*",
+    # MONAI 1.4's PersistentDataset reads its own cache files with torch.load(weights_only=False).
+    "ignore:You are using `torch.load`:FutureWarning:monai\\..*",
 ]
