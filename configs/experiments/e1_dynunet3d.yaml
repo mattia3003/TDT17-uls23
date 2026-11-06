@@ -1,0 +1,8 @@
+# E1: 3-D DynUNet on DeepLesion3D + Bone (D14), validated on the val split.
+include:
+  - configs/data/uls23.yaml
+  - configs/splits.yaml
+  - configs/base.yaml
+  - configs/model/dynunet3d.yaml
+run:
+  name: e1_dynunet3d

@@ -88,6 +88,20 @@ scp mattiald@idun-login1.hpc.ntnu.no:~/tdt17-uls23/data/manifest.csv data/manife
 scp -r mattiald@idun-login1.hpc.ntnu.no:~/tdt17-uls23/results/eda results
 ```
 
+**Training** uses one experiment config (`configs/experiments/`) and one machine config. A run writes to `paths.work_dir/runs/<run.name>/`, which holds `log.csv`, the checkpoints and `compute.json`. A run that hits a time limit is continued with `--resume`, which works on either machine. Put `--resume` before any `key=value` overrides.
+
+```powershell
+# Home PC: E0 on the real-file sample, outputs in work/ (gitignored)
+python scripts/train.py --config configs/experiments/e0_overfit.yaml --machine configs/machines/home_pc.yaml paths.data_root=data/sample/ULS23 paths.work_dir=work machine.num_workers=0
+```
+
+```bash
+# IDUN
+sbatch --time=00:30:00 slurm/train.slurm configs/experiments/timing.yaml
+sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml
+sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml --resume
+```
+
 **Light work on the login node is fine:** things that take seconds and read only a few files, such as `scripts/eda.py --reuse-manifest`. Use the same environment as the jobs: `source slurm/idun_env.sh`. Anything that reads the whole dataset, or uses a GPU, goes through `sbatch`.
 
 **Logging:** after every significant job, run `sacct -j <jobid> --format=JobID,Elapsed,State,AllocCPUS,MaxRSS` and add a row to `COMPUTE_LOG.md`, including for failed jobs.

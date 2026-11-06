@@ -255,19 +255,23 @@ Keep the 3–5 most useful figures for the video.
 > - batch size per machine
 > - whether the home PC gets a copy of the training data (DeepLesion3D + Bone is 14.3 GB, Pancreas 1.6 GB). `configs/machines/home_pc.yaml` still has placeholder paths.
 
-> **Progress (2026-11-06):** build steps 1–2 are done (D24–D27). `splits/uls23_splits.csv` is generated. The transforms passed the real-file check on `data/sample`. 41 tests pass. The choices on sampling, augmentation, post-processing and home-PC data were confirmed as D28–D31, and the test-split justification was added to D15. Next is step 3, `train.py`.
+> **Progress (2026-11-06):** build steps 1–2 are done (D24–D27). `splits/uls23_splits.csv` is generated. The transforms passed the real-file check on `data/sample`. 41 tests pass. The choices on sampling, augmentation, post-processing and home-PC data were confirmed as D28–D31, and the test-split justification was added to D15. Step 3 (`scripts/train.py`, D32–D35) is done, with 47 tests passing. Its metrics, D30 post-processing and sliding-window code are shared with step 4.
+>
+> **Progress (2026-11-06, E0):** the first E0 (500 steps) reached val Dice 0.459, because the two tiny lesions weren't learned yet (D37). A rerun with 2000 steps reached 0.900, with both small lesions above 0.8, so the setup is slow on tiny lesions but not stuck (D38). Caching removed the data wait (about 0.8 s per step without it, with `num_workers` 0).
+>
+> **Next:** the student runs the timing run on IDUN. Batch size, optimiser, loss and model selection are confirmed (D36). The epoch count is chosen from the measured time per step. After that, step 4 (`evaluate.py`) is written.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
 - [x] Write config-driven MONAI transforms and a model factory that supports 2D and 3D.
-- [ ] Cache the deterministic part of preprocessing (load, offset correction, clipping and scaling) with MONAI's `PersistentDataset`, in the work directory. Measure during E0 whether data loading is a bottleneck; if not, caching can stay off. *(Implemented, `cache.enabled`; the E0 measurement is still to come.)*
-- [ ] Write a training script with mixed precision, checkpoint and resume, and CSV logging. Each run saves its resolved config, seed and git commit.
-- [ ] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space.
-- [ ] Test the metrics on synthetic masks, and test that the same seed gives the same splits. *(Split part done, in `tests/test_splits.py`.)*
+- [x] Cache the deterministic part of preprocessing (load, offset correction, clipping and scaling) with MONAI's `PersistentDataset`, in the work directory. Measure during E0 whether data loading is a bottleneck; if not, caching can stay off. *(Implemented, `cache.enabled`. On the home PC with `num_workers` 0, it cut the data wait from about 0.8 s per step to about 0 (D38). IDUN's 8 workers may hide the wait anyway; the timing run shows this.)*
+- [x] Write a training script with mixed precision, checkpoint and resume, and CSV logging. Each run saves its resolved config, seed and git commit.
+- [ ] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space. *(The metrics, D30 post-processing and sliding-window code exist in `src/evaluation/`; `scripts/evaluate.py` is still to come.)*
+- [x] Test the metrics on synthetic masks, and test that the same seed gives the same splits.
 - [ ] Write a script that saves qualitative examples.
-- [ ] Add compute logging inside the training code, so it works on both machines: elapsed time and `nvidia-smi` power samples. Use `sacct` as an extra check on IDUN.
-- [ ] Keep Slurm scripts as thin wrappers around the same `train.py` command used locally. Use a separate path config for each machine.
-- [ ] Make sure checkpoints can resume on either machine, so a run can move between them.
+- [x] Add compute logging inside the training code, so it works on both machines: elapsed time and `nvidia-smi` power samples. Use `sacct` as an extra check on IDUN.
+- [x] Keep Slurm scripts as thin wrappers around the same `train.py` command used locally. Use a separate path config for each machine.
+- [x] Make sure checkpoints can resume on either machine, so a run can move between them.
 
 **Done when:** the student has run **E0** and Dice approaches 1 on the overfit VOIs.
 

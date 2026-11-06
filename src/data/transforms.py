@@ -46,9 +46,9 @@ def preprocessing(intensity_cfg: Mapping[str, Any]) -> list[mt.Transform]:
     ]
 
 
-def to_float32(track_meta: bool) -> mt.Transform:
-    """Cast back to float32; metadata (affine) is only kept where predictions may be saved."""
-    return mt.EnsureTyped(keys=KEYS, dtype=torch.float32, track_meta=track_meta)
+def to_float32() -> mt.Transform:
+    """Cast patches back to float32 for training (metadata is not needed there)."""
+    return mt.EnsureTyped(keys=KEYS, dtype=torch.float32, track_meta=False)
 
 
 def from_specs(specs: Sequence[Mapping[str, Any]]) -> list[mt.Transform]:
@@ -66,11 +66,15 @@ def train_transforms(intensity_cfg: Mapping[str, Any], transforms_cfg: Mapping[s
         *preprocessing(intensity_cfg),
         mt.RandSpatialCropSamplesd(keys=KEYS, roi_size=transforms_cfg["patch_size"],
                                    num_samples=transforms_cfg["samples_per_volume"], random_size=False),
-        to_float32(track_meta=False),
+        to_float32(),
         *from_specs(transforms_cfg.get("augment") or []),
     ])
 
 
 def eval_transforms(intensity_cfg: Mapping[str, Any]) -> mt.Compose:
-    """Preprocessing only: the whole VOI on its native grid, ready for sliding-window prediction."""
-    return mt.Compose([*preprocessing(intensity_cfg), to_float32(track_meta=True)])
+    """Preprocessing only: the whole VOI on its native grid, with metadata (affine) kept.
+
+    It stays in the compact dtypes and ends exactly where the training chain's cached part ends,
+    so both chains share one cache file per VOI; the prediction code casts to float32.
+    """
+    return mt.Compose(preprocessing(intensity_cfg))

@@ -46,6 +46,14 @@ def test_env_vars_are_expanded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert load_config([path])["paths"]["work_dir"] == "/cluster/work/alice/x"
 
 
+def test_includes_are_merged_first_and_own_values_win(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # include paths are relative to the working directory (repo root)
+    write(tmp_path / "base.yaml", "train:\n  epochs: 10\n  lr: 0.01\n")
+    write(tmp_path / "mid.yaml", "include: [base.yaml]\ntrain:\n  epochs: 20\n")
+    exp = write(tmp_path / "exp.yaml", "include: [mid.yaml]\nrun:\n  name: e1\ntrain:\n  lr: 0.1\n")
+    assert load_config([exp]) == {"train": {"epochs": 20, "lr": 0.1}, "run": {"name": "e1"}}
+
+
 def test_save_and_reload_roundtrip(tmp_path: Path) -> None:
     cfg = {"seed": 42, "model": {"name": "dynunet", "roi": [128, 128, 64]}}
     save_config(cfg, tmp_path / "out" / "config.yaml")

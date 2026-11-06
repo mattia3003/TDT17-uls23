@@ -1,0 +1,19 @@
+# E0: overfit the 4 training VOIs of the real-file sample (data/sample), to check the pipeline can learn.
+# Done when the validation Dice on these same VOIs approaches 1. Runs on the home PC without copying data.
+include: [configs/experiments/e1_dynunet3d.yaml]
+run:
+  name: e0_overfit
+transforms:
+  augment: []  # no augmentation: the goal is to memorise
+cache:
+  enabled: true  # removes the data wait with num_workers 0 (D38)
+train:
+  epochs: 1000  # 2 steps per epoch, so 2000 steps; 500 were too few for the tiny lesions (D37, D38)
+  only_cases:
+    - 000010_02_02_100_lesion_01
+    - 000156_02_01_037_lesion_01
+    - bone_00002_lesion_01
+    - bone_00149_lesion_08
+validation:
+  splits: [train]  # the same 4 VOIs
+  every: 50

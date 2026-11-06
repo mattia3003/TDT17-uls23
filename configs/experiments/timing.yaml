@@ -1,0 +1,12 @@
+# Timing run for the E1 setup: 60 training steps on the full data, plus 10 validation VOIs.
+# log.csv gives seconds per step (compute_s / steps) and data wait (data_s); the start check
+# gives seconds per validation VOI. Together they give the cost of E1 per epoch.
+include: [configs/experiments/e1_dynunet3d.yaml]
+run:
+  name: timing
+train:
+  epochs: 1
+  max_steps_per_epoch: 60
+validation:
+  every: 0
+  check_at_start: 10

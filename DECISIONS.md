@@ -160,3 +160,80 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *For the video:* the difference between the two Dice values shows how much the result depends on the centre prior.
 
 **D31. The home PC gets no copy of the training data for now.** This is decided after E0, from the PC vs IDUN timing comparison. `configs/machines/home_pc.yaml` keeps its placeholder paths until then.
+
+## Phase 2: Training code
+
+**D32. Experiment configs name their shared defaults with `include:` (extends D3).**
+- *How it works:* `configs/experiments/e1_dynunet3d.yaml` includes the data, split, base and model configs. Includes are merged first, and the file's own values win. E0 and the timing run include E1 and change only what differs.
+- *Why:* one file then describes one experiment, so a command or Slurm job needs only `--config configs/experiments/<name>.yaml`, and the experiment's differences from E1 are visible in a few lines. The loader stays small, with plain YAML and no interpolation.
+
+**D33. Each run gets its own folder under `paths.work_dir/runs/<run.name>/`, and checkpoints resume exactly, on either machine.**
+- *What the folder holds:* the resolved config, `run_info.json` (seed, plus git commit, dirty flag, versions, GPU, host and Slurm job ID for every session), `log.csv` with one row per epoch, per-lesion validation CSVs, `last.pt` (saved every epoch, written via a temporary file) and `best.pt`.
+- *Overwrite guard:* a new run refuses to start in a folder that already has a checkpoint.
+- *Resume guard:* `--resume` refuses if the config differs from the saved one, except `machine` and `paths`, so a run can move between IDUN and the PC.
+- *Exact resume:* each epoch's shuffling and augmentation are seeded with `seed + epoch`, and the data workers are restarted every epoch so the new seed takes effect. A resumed run therefore sees the same data as an uninterrupted one. `tests/test_training.py` checks that a run stopped after epoch 1 and resumed ends with bit-identical weights (on the CPU; GPU runs can still differ slightly, D24).
+- *Fail-fast:* a non-finite loss stops the run at once, and 2 validation VOIs are predicted before training starts, so a bug in the validation code shows up in the first minutes, not after hours.
+
+**D34. Compute is logged inside the training code, the same way on both machines.**
+- *Sampling:* `nvidia-smi` samples power, utilisation and memory of the job's GPU every 10 s into `power.csv`.
+- *Summary:* `compute.json` is updated every epoch with the elapsed time (summed over sessions), the mean GPU power and GPU energy = mean power × elapsed time.
+- *Bottleneck check:* `log.csv` separates time waiting for data (`data_s`) from GPU step time (`compute_s`), which shows directly whether caching is needed (D22).
+- *Cross-check:* on IDUN, `sacct` checks the elapsed time.
+
+**D35. E0 and the timing run.**
+- *E0:* trains on the 4 training VOIs in `data/sample` (2 DeepLesion3D, 2 Bone, including the shifted Bone VOI), with no augmentation, and validates on the same VOIs. It runs on the home PC without copying the dataset, and passes when the validation Dice approaches 1.
+- *Timing run:* the E1 setup on the full data on IDUN, for 60 steps plus 10 validation VOIs. Seconds per step × 545 steps per epoch, plus the validation time, gives the cost of E1 before the epoch count is chosen.
+
+**D36. Training settings (confirmed by the student, 2026-11-06). The epoch count follows from the timing run.**
+- *Batch:* 2 VOIs per step × 2 patches each = 4 patches of 128×128×64, the same on IDUN and the home PC. Runs are then comparable and can move between machines with `--resume` (D33). E0's peak memory confirms that this fits the 11 GB card.
+- *Optimiser and loss:* nnU-Net's defaults, which DynUNet is modelled on:
+  - SGD with Nesterov momentum 0.99, learning rate 0.01 and weight decay 3·10⁻⁵
+  - polynomial learning-rate decay (power 0.9) over the epochs
+  - Dice + cross-entropy loss, with the background channel left out of the Dice part. Background is almost all voxels, and including it would make the Dice term easy to satisfy.
+  - gradient-norm clipping at 12
+  - float16 mixed precision
+
+  *Why:* these settings are well tested for this architecture on CT segmentation, so no tuning is needed. That fits the project's minimum-effort scope and the "no hyperparameter search" rule.
+- *Model selection:* every 10 epochs (and after the last), the model predicts all 192 validation VOIs with a sliding window. `best.pt` keeps the weights with the highest mean raw Dice. The centre-component Dice (D30) is logged next to it, but not used for selection, so the choice of checkpoint doesn't depend on the post-processing. The test split is never used (D15).
+
+## Phase 2: E0 results
+
+**D37. First E0 (500 steps on the home PC): the pipeline learns, but the two tiny lesions failed. One caching bug was found and fixed.**
+- *Result:* mean val Dice 0.459. Per lesion:
+
+  | Lesion | Size (voxels) | Dice | Dice after D30 |
+  |---|---|---|---|
+  | `bone_00002` | 8 356 | 0.92 | 0.93 |
+  | `bone_00149` (shifted VOI, D17) | 80 792 | 0.89 | 0.91 |
+  | `000156` (DeepLesion3D) | 169 | 0.04 | 0.23 |
+  | `000010` (DeepLesion3D, 659 HU) | 117 | 0.00 | 0.00 |
+
+  The loss stayed near 1.0 for the first 70 epochs, while the model predicted almost nothing, and then fell to 0.53.
+- *Diagnosis* (inference with `best.pt` on the two small VOIs):
+  - The model gives `000010` a lesion probability of about 0.001, so it hasn't learned it yet.
+  - `000156` is found (recall 1.0), but as a blob 8× too large.
+  - The false positives sit near the VOI edges and corners: 100–170 voxels from the lesion, with the largest (6403 voxels) in a corner. Random patches rarely cover those regions, since a corner voxel is in roughly 1 % of patches (D28), so the model has barely seen them. The D30 step removes such false positives.
+- *Interpretation:* not a pipeline bug. The large lesions, the offset correction, the loss and the sliding window all work. 500 steps, with the learning rate decaying to 0, are too few to memorise lesions of 117–169 voxels inside patches of about 1 M voxels.
+- *For E1 and the video:* watch the gap between raw and centre-component Dice on validation. A large gap means edge false positives. Small lesions are the expected weak point (pitfall 6), so the size breakdown in E3 matters.
+- *Caching bug (found while preparing the rerun with caching on, and fixed before any run used the cache):* the train and eval chains wrote the same cache file per VOI, but the eval chain cast to float32 before caching. Whichever chain wrote first then decided what the other one received. The eval chain now ends exactly where the training chain's cached part ends (float16 image, uint8 label, metadata kept), and the prediction code casts to float32. `tests/test_pipeline.py` covers both write orders.
+- *Timing on the home PC:* 0.43 s of GPU time per step of 4 patches, and 4.7 GB peak memory, which confirms the batch size of D36. Validating a whole VOI takes about 0.85 s. With `num_workers` 0, the GPU waited for data about 0.8 s per step.
+
+**D38. E0 rerun with 4× the steps (2000): passed. The small lesions were slow to learn, not unlearnable, so the E1 setup stays as it is.**
+- *Why a rerun, and not a change to the setup:* only 4 VOIs doesn't mean the task is easy. The two DeepLesion3D lesions fill about 0.01 % of a 128×128×64 patch, so almost every voxel the loss sees is background. Early on, cross-entropy is minimised by predicting background everywhere. The softmax then saturates, and its gradient (scaled by p(1−p)) becomes tiny for those few lesion voxels. SGD with momentum 0.99 also starts slowly, and in the first run the learning rate had decayed to 0 after 500 steps. The rerun was set up as a test with criteria fixed in advance:
+  - *slow:* both small lesions reach Dice above about 0.8, so the setup is fine for E1;
+  - *stuck:* `000010` stays near 0, so the loss or optimiser must change before E1 (for example Adam, or deep supervision).
+- *Run:* `e0_overfit_v2`, home PC, 1000 epochs = 2000 steps, no augmentation, validation every 50 epochs, caching on. It was interrupted after epoch 13 (to silence a repeated warning) and resumed from `last.pt`, which also exercised the resume path on a real run. `configs/experiments/e0_overfit.yaml` now holds these settings, so the README's E0 command reproduces this run.
+- *Result:* mean val Dice 0.900 (0.902 after D30), at the last epoch.
+
+  | Lesion | Size (voxels) | Dice (first E0) | Dice (rerun) | Dice after D30 (rerun) |
+  |---|---|---|---|---|
+  | `bone_00002` | 8 356 | 0.92 | 0.94 | 0.94 |
+  | `bone_00149` (shifted VOI, D17) | 80 792 | 0.89 | 0.94 | 0.94 |
+  | `000156` (DeepLesion3D) | 169 | 0.04 | 0.89 | 0.89 |
+  | `000010` (DeepLesion3D, 659 HU) | 117 | 0.00 | 0.83 | 0.83 |
+
+- *Learning curve (mean DeepLesion3D Dice):* about 0 until epoch 450 (900 steps), then 0.37 at epoch 500, 0.44 at 700, and 0.85 at 800, where the training loss also dropped from 0.34 to 0.14. The bone lesions were above 0.85 from epoch 250. So the small lesions were learned late and suddenly, which fits the saturation explanation above.
+- *Raw vs. D30 Dice:* almost equal now (0.900 vs 0.902), so the edge false positives of the first run are gone after enough training.
+- *What it means for E1:* an E1 epoch is about 545 steps (1 089 training VOIs, batch 2), so E1 gets far more steps than this. It also sees many small lesions, not 2. Expect validation Dice on small lesions to rise later than on large ones, and don't stop E1 early because small lesions look poor in the first epochs. The epoch count still comes from the IDUN timing run.
+- *Timing on the home PC (with caching):* about 0.8 s per epoch of 2 steps, data wait about 0, validation of 4 VOIs about 3.5 s, peak memory 4.7 GB.
+

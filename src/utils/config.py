@@ -3,6 +3,10 @@
 Configs are merged left to right (later files win), then command-line overrides
 are applied, then environment variables (``$VAR`` / ``${VAR}``) and ``~`` in
 string values are expanded. The result is a plain nested ``dict``.
+
+A file may list other files under ``include`` (paths relative to the repo root,
+the working directory of every script). They are merged first, in order, and the
+file's own values win, so one experiment file names its shared defaults.
 """
 
 from __future__ import annotations
@@ -62,11 +66,20 @@ def load_yaml(path: str | Path) -> dict[str, Any]:
     return data
 
 
+def load_with_includes(path: str | Path) -> dict[str, Any]:
+    """Load one YAML file, with the files it lists under ``include`` merged in first."""
+    data = load_yaml(path)
+    cfg: dict[str, Any] = {}
+    for included in data.pop("include", None) or []:
+        cfg = deep_merge(cfg, load_with_includes(included))
+    return deep_merge(cfg, data)
+
+
 def load_config(paths: Iterable[str | Path], overrides: Iterable[str] = ()) -> dict[str, Any]:
-    """Merge YAML files in order, apply overrides, then expand environment variables."""
+    """Merge YAML files (and their includes) in order, apply overrides, then expand environment variables."""
     cfg: dict[str, Any] = {}
     for path in paths:
-        cfg = deep_merge(cfg, load_yaml(path))
+        cfg = deep_merge(cfg, load_with_includes(path))
     for override in overrides:
         apply_override(cfg, override)
     return expand_env(cfg)

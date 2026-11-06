@@ -20,3 +20,28 @@ cache:
   # Store the deterministic preprocessing under paths.work_dir/cache/<hash> (PersistentDataset).
   # Off unless E0 shows that data loading is the bottleneck (D22).
   enabled: false
+
+train:
+  epochs: 200      # one epoch = every training VOI once; to be set from the timing run
+  batch_size: 2    # VOIs per step, so 2 x samples_per_volume = 4 patches per step
+  amp: true        # float16 mixed precision
+  grad_clip: 12    # max gradient norm (nnU-Net default)
+  # nnU-Net defaults: Dice + cross-entropy, SGD with Nesterov momentum, polynomial LR decay per epoch.
+  loss: {name: DiceCELoss, to_onehot_y: true, softmax: true, include_background: false}
+  optimizer: {name: SGD, lr: 0.01, momentum: 0.99, nesterov: true, weight_decay: 3.0e-5}
+  scheduler: {name: PolynomialLR, power: 0.9}  # total_iters is set to train.epochs
+  only_cases: null           # list of case names to train on (E0); null = the whole train split
+  max_steps_per_epoch: null  # cap for quick timing runs; null = full epochs
+
+validation:
+  splits: [val]
+  every: 10           # epochs between validations on whole VOIs (0 = never); also after the last epoch
+  check_at_start: 2   # validate this many VOIs before training, so the validation code fails fast
+
+inference:
+  sw_batch_size: 4   # sliding-window patches per forward pass
+  overlap: 0.5
+  mode: gaussian     # weight window centres more than edges
+
+power:
+  interval_s: 10     # nvidia-smi sampling interval
