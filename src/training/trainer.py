@@ -184,7 +184,8 @@ def fit(cfg: Mapping[str, Any], resume: bool = False) -> Path:
             (run_dir / "compute.json").write_text(json.dumps({**summary, "epochs_done": epoch + 1}, indent=2))
             print(format_row(row), flush=True)
 
-    print(f"Done. Best mean validation Dice {best['val_dice']:.3f} at epoch {best['epoch']}; outputs in {run_dir}")
+    result = f"Best mean validation Dice {best['val_dice']:.3f} at epoch {best['epoch']}" if best["epoch"] else "No validation run"
+    print(f"Done. {result}; outputs in {run_dir}")
     return run_dir
 
 

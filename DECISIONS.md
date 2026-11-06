@@ -237,3 +237,21 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *What it means for E1:* an E1 epoch is about 545 steps (1 089 training VOIs, batch 2), so E1 gets far more steps than this. It also sees many small lesions, not 2. Expect validation Dice on small lesions to rise later than on large ones, and don't stop E1 early because small lesions look poor in the first epochs. The epoch count still comes from the IDUN timing run.
 - *Timing on the home PC (with caching):* about 0.8 s per epoch of 2 steps, data wait about 0, validation of 4 VOIs about 3.5 s, peak memory 4.7 GB.
 
+## Phase 2: Timing
+
+**D39. IDUN timing run: the job got a P100, which is about 5× slower than the home PC's RTX 2080 Ti. The E1 GPU type and epoch count are still open.**
+- *Run:* job 25947781, `configs/experiments/timing.yaml`: 60 training steps on the full training set, after a 10-VOI validation check, with no cache and 8 data workers. It completed in 3.5 minutes.
+- *Result:*
+
+  | | Home PC (RTX 2080 Ti, E0) | IDUN (P100-PCIE-16GB) |
+  |---|---|---|
+  | GPU time per step (4 patches) | 0.43 s | 2.14 s |
+  | Data wait per step | about 0 (cache) | 0.03 s (no cache, 8 workers) |
+  | Validation per VOI | 0.85 s | 4.5 s |
+  | Peak GPU memory | 4.7 GB | 4.7 GB |
+  | Mean GPU power | 209 W | 130 W |
+
+- *Interpretation:* the GPU is the bottleneck, not the data. With 8 workers, the cache isn't needed on IDUN. The P100 has no tensor cores, so mixed precision gains little there, while the 2080 Ti does have them.
+- *What it would mean for E1 on a P100:* an epoch of about 545 steps takes about 20 minutes, and validating the 192 VOIs takes about 14 minutes (every 10 epochs). A 24-hour job then fits about 65–70 epochs, or about 37 000 steps. E0 showed that small lesions are learned late (D38), so this is on the low side.
+- *GPUQ mixes GPU types:* the Phase 0 check got a V100, this run got a P100. The epoch count should therefore be based on the GPU type E1 actually runs on. The options are: request a faster type with a Slurm constraint and repeat the timing run on it; train E1 on the home PC (about 4 minutes per epoch, but it needs a data copy, see D31); or accept the P100 and resume across several 24-hour jobs. Decision pending.
+

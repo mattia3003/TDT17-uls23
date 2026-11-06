@@ -259,7 +259,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-06, E0):** the first E0 (500 steps) reached val Dice 0.459, because the two tiny lesions weren't learned yet (D37). A rerun with 2000 steps reached 0.900, with both small lesions above 0.8, so the setup is slow on tiny lesions but not stuck (D38). Caching removed the data wait (about 0.8 s per step without it, with `num_workers` 0).
 >
-> **Next:** the student runs the timing run on IDUN. Batch size, optimiser, loss and model selection are confirmed (D36). The epoch count is chosen from the measured time per step. After that, step 4 (`evaluate.py`) is written.
+> **Progress (2026-11-06, timing):** the IDUN timing run landed on a P100: 2.14 s per step, about 5× slower than the home PC. Data loading is not a bottleneck (D39).
+>
+> **Next:** choose the GPU type for E1 (D39), repeat the timing run on it if it's a new type, and then set the epoch count. After that, step 4 (`evaluate.py`) is written.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.

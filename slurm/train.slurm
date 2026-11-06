@@ -17,4 +17,5 @@ cd "${SLURM_SUBMIT_DIR:-.}"
 source slurm/idun_env.sh
 
 nvidia-smi
-python scripts/train.py --config "$1" --machine configs/machines/idun.yaml "${@:2}"
+# -u: unbuffered output, so the log file shows each epoch as it finishes (tail -f works)
+python -u scripts/train.py --config "$1" --machine configs/machines/idun.yaml "${@:2}"
