@@ -128,6 +128,12 @@ sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits test      # Phase 4, onc
 sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits heldout   # E2: all of Pancreas
 ```
 
+**Figures** of the worst, median and best lesion per dataset, and of the 12 worst lesions overall, are drawn from an evaluation folder. This needs no GPU and is fine on the login node:
+
+```bash
+python scripts/qualitative.py --run e1_dynunet3d --eval val_best --machine configs/machines/idun.yaml
+```
+
 `--splits` and `--cases` read every word after them until the next `--option`. Any `key=value` overrides must therefore come after another option, such as `--machine` or `--checkpoint best`. Otherwise they're read as split names and rejected.
 
 **Light work on the login node is fine:** things that take seconds and read only a few files, such as `scripts/eda.py --reuse-manifest`. Use the same environment as the jobs: `source slurm/idun_env.sh`. Anything that reads the whole dataset, or uses a GPU, goes through `sbatch`.

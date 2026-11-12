@@ -267,7 +267,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-12, E1 and step 4):** E1 is running on an A100 at about 55 s per epoch, so about 4.5 h in total. Step 4, `scripts/evaluate.py`, is written and passed the real-file check (D42). 54 tests pass.
 >
-> **Next:** the epoch-100 check of E1, then the qualitative-examples script.
+> **Progress (2026-11-12, epoch-100 check):** val Dice was 0.160 at epoch 100 and 0.185 at epoch 110, rising about 0.02 per 10 epochs, so E1 continues. The qualitative-examples script is written (D42).
+>
+> **Next:** E1 finishes, then Gate 2: evaluate on val, look at the figures, and decide whether the setup needs a fix.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
@@ -276,7 +278,7 @@ Keep the 3–5 most useful figures for the video.
 - [x] Write a training script with mixed precision, checkpoint and resume, and CSV logging. Each run saves its resolved config, seed and git commit.
 - [x] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space. *(`scripts/evaluate.py`, D42. It handles any 3-D model from the factory; a 2-D model for E4 will need its own prediction step.)*
 - [x] Test the metrics on synthetic masks, and test that the same seed gives the same splits.
-- [ ] Write a script that saves qualitative examples.
+- [x] Write a script that saves qualitative examples. *(`scripts/qualitative.py`, D42.)*
 - [x] Add compute logging inside the training code, so it works on both machines: elapsed time and `nvidia-smi` power samples. Use `sacct` as an extra check on IDUN.
 - [x] Keep Slurm scripts as thin wrappers around the same `train.py` command used locally. Use a separate path config for each machine.
 - [x] Make sure checkpoints can resume on either machine, so a run can move between them.

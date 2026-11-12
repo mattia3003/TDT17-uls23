@@ -14,6 +14,7 @@ import torch
 import src.training.trainer as trainer
 from src.data.manifest import load_nifti, spatial_array
 from src.evaluation.evaluator import evaluate_run, summarise
+from src.evaluation.figures import pick_examples, save_examples, worst_lesions
 from src.evaluation.metrics import keep_centre_component, overlap_metrics
 from src.training.checkpoint import config_differences, load_checkpoint
 from src.utils.compute import energy_summary, read_power_log
@@ -158,6 +159,20 @@ def test_evaluate_run_matches_validation_and_saves_masks(tmp_path: Path, monkeyp
     assert (out / "summary.csv").is_file() and json.loads((out / "compute.json").read_text())["vois"] == 1
     with pytest.raises(FileExistsError):
         evaluate_run(cfg, run_dir, ["val"])  # results are never overwritten
+
+    windows = {"soft_tissue": [-160, 240], "bone": [-450, 1250], "bone_above_hu": 500}
+    figures = save_examples(cfg, out, windows, worst_n=2)
+    assert (figures / "examples.png").is_file() and (figures / "worst.png").is_file()
+    assert pd.read_csv(figures / "examples.csv")["pick"].tolist() == ["worst", "median", "best"]
+
+
+def test_pick_examples_and_worst_lesions() -> None:
+    lesions = pd.DataFrame({"dataset": ["A"] * 4 + ["B"], "case": ["a1", "a2", "a3", "a4", "b1"],
+                            "dice": [0.9, 0.1, 0.5, 0.7, 0.3]})
+    picks = pick_examples(lesions)
+    assert list(zip(picks["pick"], picks["case"])) == [("worst", "a2"), ("median", "a3"), ("best", "a1"),
+                                                       ("worst", "b1"), ("median", "b1"), ("best", "b1")]
+    assert worst_lesions(lesions, 2)["case"].tolist() == ["a2", "b1"]
 
 
 def test_summarise_groups() -> None:

@@ -336,4 +336,9 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **No cache.** Evaluation is a single pass, so a cache would not save time, and it would add about 10 GB of test and Pancreas VOIs to `/cluster/work`.
   - **Pancreas uses exactly the same settings** as the training datasets. No Pancreas-specific choice is made, so E2 stays zero-shot.
 - *Checks:* a unit test trains a tiny model and checks that `evaluate.py` gives exactly the Dice that training's validation recorded for `best.pt`. On the real-file sample with the E0 weights, it reproduced D38's per-lesion Dice (`000010` 0.829, `bone_00002` 0.939). The two Pancreas lesions scored 0, as expected for a model that memorised 4 non-Pancreas VOIs.
+- *Qualitative figures (`scripts/qualitative.py`):* the script reads an evaluation folder and writes `figures/examples.png` and `figures/worst.png`, each with a CSV of the chosen cases. It needs no GPU and only a few dozen VOIs, so it runs on the login node.
+  - `examples.png` shows the worst, median and best lesion of each dataset by raw Dice.
+  - `worst.png` shows the 12 worst lesions overall, for the failure review in E3.
+  - Each lesion gets two panels on its largest label slice: a zoom around the lesion, and the whole VOI slice, so false positives away from the lesion are visible. The label is outlined in amber and the raw prediction in blue. The display windows and offset correction are the same as in the EDA gallery (D23).
+  - On the sample, the outlines matched the anatomy, which confirms that the saved masks keep the VOI's orientation.
 
