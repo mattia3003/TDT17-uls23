@@ -265,14 +265,16 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-12, course split):** the first E1 job failed because the course staff had reorganised the data into course train/test folders. We switched to the course split, with Pancreas still held out (D41). The files are byte-identical to before, and the split file has been regenerated.
 >
-> **Next:** the student submits E1. While it trains, step 4 (`evaluate.py`) is written.
+> **Progress (2026-11-12, E1 and step 4):** E1 is running on an A100 at about 55 s per epoch, so about 4.5 h in total. Step 4, `scripts/evaluate.py`, is written and passed the real-file check (D42). 54 tests pass.
+>
+> **Next:** the epoch-100 check of E1, then the qualitative-examples script.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
 - [x] Write config-driven MONAI transforms and a model factory that supports 2D and 3D.
 - [x] Cache the deterministic part of preprocessing (load, offset correction, clipping and scaling) with MONAI's `PersistentDataset`, in the work directory. Measure during E0 whether data loading is a bottleneck; if not, caching can stay off. *(Implemented, `cache.enabled`. On the home PC with `num_workers` 0, it cut the data wait from about 0.8 s per step to about 0 (D38). IDUN's 8 workers may hide the wait anyway; the timing run shows this.)*
 - [x] Write a training script with mixed precision, checkpoint and resume, and CSV logging. Each run saves its resolved config, seed and git commit.
-- [ ] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space. *(The metrics, D30 post-processing and sliding-window code exist in `src/evaluation/`; `scripts/evaluate.py` is still to come.)*
+- [x] Write a model-agnostic evaluation script that outputs the per-lesion CSV in original VOI space. *(`scripts/evaluate.py`, D42. It handles any 3-D model from the factory; a 2-D model for E4 will need its own prediction step.)*
 - [x] Test the metrics on synthetic masks, and test that the same seed gives the same splits.
 - [ ] Write a script that saves qualitative examples.
 - [x] Add compute logging inside the training code, so it works on both machines: elapsed time and `nvidia-smi` power samples. Use `sacct` as an extra check on IDUN.

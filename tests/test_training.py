@@ -1,5 +1,6 @@
-"""Tests for metrics, post-processing, compute logging, and a tiny end-to-end training run with resume."""
+"""Tests for metrics, post-processing, compute logging, a tiny end-to-end training run with resume, and evaluation."""
 
+import json
 import math
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ import pytest
 import torch
 
 import src.training.trainer as trainer
+from src.data.manifest import load_nifti, spatial_array
+from src.evaluation.evaluator import evaluate_run, summarise
 from src.evaluation.metrics import keep_centre_component, overlap_metrics
 from src.training.checkpoint import config_differences, load_checkpoint
 from src.utils.compute import energy_summary, read_power_log
@@ -83,8 +86,9 @@ def tiny_config(tmp_path: Path, run_name: str) -> dict[str, Any]:
     rows = [write_case(data, f"c{i}", i) for i in range(4)]
     pd.DataFrame(rows).assign(patient_id="unused").to_csv(tmp_path / "manifest.csv", index=False)
     pd.DataFrame({"dataset": "DS", "case": [r["case"] for r in rows], "patient_id": [f"DS:{i}" for i in range(4)],
-                  "split": ["train", "train", "train", "val"], "image": [r["image"] for r in rows],
-                  "label": [r["label"] for r in rows]}).to_csv(tmp_path / "splits.csv", index=False)
+                  "split": ["train", "train", "train", "val"], "course_split": "train", "patient_in_both": False,
+                  "image": [r["image"] for r in rows], "label": [r["label"] for r in rows],
+                  }).to_csv(tmp_path / "splits.csv", index=False)
     return {
         "seed": 0, "deterministic": True, "run": {"name": run_name},
         "machine": {"name": "test", "num_workers": 0},
@@ -137,3 +141,32 @@ def test_fit_writes_outputs_and_resume_matches_an_uninterrupted_run(tmp_path: Pa
     assert pd.read_csv(resumed / "log.csv")["epoch"].tolist() == [1, 2, 3]
     a, b = load_checkpoint(full / "last.pt")["model"], load_checkpoint(resumed / "last.pt")["model"]
     assert all(torch.equal(a[k], b[k]) for k in a)
+
+
+def test_evaluate_run_matches_validation_and_saves_masks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    cfg = tiny_config(tmp_path, "run")
+    run_dir = trainer.fit(cfg)
+    out = evaluate_run(cfg, run_dir, ["val"])
+    lesions = pd.read_csv(out / "per_lesion.csv")
+    assert lesions["case"].tolist() == ["c3"]
+    assert {"dice", "dice_pp", "predict_s", "split", "course_split", "intensity_group"} <= set(lesions)
+    # Same weights and code path as the validation that chose best.pt, so the same Dice.
+    assert lesions["dice"].tolist() == pytest.approx(pd.read_csv(run_dir / "val_best.csv")["dice"].tolist())
+    mask, _ = load_nifti(out / "predictions" / "c3.nii.gz")
+    assert spatial_array(mask).shape == SHAPE
+    assert (out / "summary.csv").is_file() and json.loads((out / "compute.json").read_text())["vois"] == 1
+    with pytest.raises(FileExistsError):
+        evaluate_run(cfg, run_dir, ["val"])  # results are never overwritten
+
+
+def test_summarise_groups() -> None:
+    lesions = pd.DataFrame({
+        "dataset": ["A", "A", "A", "P", "P"], "split": ["test", "test", "test", "heldout", "heldout"],
+        "course_split": ["test", "test", "test", "train", "test"], "patient_in_both": [True, False, False, False, False],
+        "dice": [0.2, 0.6, 0.8, 0.5, 0.1], "dice_pp": [0.3, 0.6, 0.8, 0.5, 0.2]})
+    summary = summarise(lesions).set_index("group")
+    assert summary.loc["all", "lesions"] == 5 and summary.loc["A", "dice_mean"] == pytest.approx(1.6 / 3)
+    assert summary.loc["A: test, patient not in course train", "dice_mean"] == pytest.approx(0.7)
+    assert summary.loc["P: course test", "lesions"] == 1 and summary.loc["P: course test", "dice_pp_mean"] == 0.2
+    assert "A: course test" not in summary.index  # one course split only: no extra row

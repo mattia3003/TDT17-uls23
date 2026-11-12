@@ -323,3 +323,17 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *Fail-fast added:* `train.py` now checks that every training and validation file exists, on the node that trains, before any GPU work. If not, it stops within seconds with "N of M image/label files are missing". The failed job above only found out when a data worker crashed.
 - *Effect on E1 cost:* 978 training VOIs instead of 1089, so about 489 steps per epoch. 250 epochs (D40) then take about 10 h on an A100. Validation covers 173 VOIs instead of 192.
 
+## Phase 2: Evaluation script
+
+**D42. `scripts/evaluate.py` (build step 4): a per-lesion CSV, grouped summaries and saved masks. Results are never overwritten (confirmed by the student, 2026-11-12).**
+- *What it does:* it loads a run's own `config.yaml` (with the machine config merged on top) and its `best.pt` (or `last.pt`). It then predicts every VOI of the chosen splits with the same sliding-window code as validation, and writes `<run>/eval/<splits>_<checkpoint>/`:
+  - `per_lesion.csv`: raw and D30 Dice, IoU, precision, recall and prediction time per lesion, plus the case metadata for E3 (category, Bone intensity group, lesion size, slice spacing, lesion–shell contrast, `split`, `course_split`, `patient_in_both`).
+  - `summary.csv`: mean and median Dice for all lesions, each dataset, Pancreas course train/test separately (E2), and the clean test subset of D41.
+  - `predictions/<case>.nii.gz`: the raw predicted masks on the VOI's own grid and affine, for the qualitative figures and the failure review.
+  - `compute.json` and `power.csv`: inference time and GPU energy, for the energy estimate.
+- *Choices:*
+  - **Results are never overwritten.** If `per_lesion.csv` exists, the script stops, and evaluating again means deleting the folder by hand. This turns "evaluate the test split once" (D15, D41) into a rule the code enforces.
+  - **No cache.** Evaluation is a single pass, so a cache would not save time, and it would add about 10 GB of test and Pancreas VOIs to `/cluster/work`.
+  - **Pancreas uses exactly the same settings** as the training datasets. No Pancreas-specific choice is made, so E2 stays zero-shot.
+- *Checks:* a unit test trains a tiny model and checks that `evaluate.py` gives exactly the Dice that training's validation recorded for `best.pt`. On the real-file sample with the E0 weights, it reproduced D38's per-lesion Dice (`000010` 0.829, `bone_00002` 0.939). The two Pancreas lesions scored 0, as expected for a model that memorised 4 non-Pancreas VOIs.
+

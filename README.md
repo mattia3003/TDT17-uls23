@@ -18,7 +18,11 @@ Data, caches, checkpoints and predictions live outside git, under `paths.work_di
 
 ## Data
 
-On IDUN, `paths.data_root` holds `data/<dataset>/images/` and `annotations/<dataset>/labels/`, paired by filename (see `configs/data/uls23.yaml`). Only the 3 novel ULS23 datasets are present. For the home PC, copy the same two subtrees for the selected datasets and keep the folder structure.
+On IDUN, `paths.data_root` holds the course's train/test split (D41): `<dataset>/<train|test>/<images|labels>/<case>.nii.gz`. Only the 3 novel ULS23 datasets are present. Training and evaluation take each case's file paths and split from `splits/uls23_splits.csv`. For the home PC, copy the same folders for the selected datasets and keep the folder structure.
+
+The manifest and EDA (Phase 1) were built from the course's earlier layout, `data/<dataset>/images/` and `annotations/<dataset>/labels/` (see `configs/data/uls23.yaml`). It is now in `2_mic/ULS23_tmp`, and its files are byte-identical. To rerun the EDA on IDUN, pass `paths.data_root=/cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23_tmp`. The real-file sample in `data/sample/ULS23` holds both layouts.
+
+`splits/course_files.txt` lists the course folders. To rebuild the split file after the course data changes, see `scripts/make_splits.py`.
 
 ## Setup: home PC (Windows, PowerShell)
 
@@ -101,6 +105,30 @@ sbatch --time=00:30:00 slurm/train.slurm configs/experiments/timing.yaml
 sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml
 sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml --resume
 ```
+
+Before training starts, `train.py` checks that every training and validation file exists. If any are missing, it stops within seconds and names one of the missing files.
+
+**Evaluation** predicts whole VOIs with a run's `best.pt` (or `--checkpoint last`). It uses the run's saved config, with the machine config merged on top. The outputs go to `<work_dir>/runs/<run>/eval/<splits>_<checkpoint>/`:
+- `per_lesion.csv`: metrics plus the metadata for the E3 breakdowns;
+- `summary.csv`: results per group;
+- `predictions/`: the predicted masks;
+- `compute.json`: inference time and energy.
+
+An existing result is never overwritten, so delete its folder to evaluate again (D42). Evaluate the test split only once the model is final.
+
+```powershell
+# Home PC: real-file check on the sample with the E0 weights (no test cases)
+python scripts/evaluate.py --run e0_overfit_v2 --splits train val heldout --cases 000010_02_02_100_lesion_01 bone_00002_lesion_01 diag_pancreas_0004_lesion_01 diag_pancreas_2066_lesion_01 --machine configs/machines/home_pc.yaml paths.data_root=data/sample/ULS23 paths.work_dir=work machine.num_workers=0
+```
+
+```bash
+# IDUN (the Slurm script adds --machine configs/machines/idun.yaml)
+sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits val       # Gate 2: inspect validation predictions
+sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits test      # Phase 4, once
+sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits heldout   # E2: all of Pancreas
+```
+
+`--splits` and `--cases` read every word after them until the next `--option`. Any `key=value` overrides must therefore come after another option, such as `--machine` or `--checkpoint best`. Otherwise they're read as split names and rejected.
 
 **Light work on the login node is fine:** things that take seconds and read only a few files, such as `scripts/eda.py --reuse-manifest`. Use the same environment as the jobs: `source slurm/idun_env.sh`. Anything that reads the whole dataset, or uses a GPU, goes through `sbatch`.
 

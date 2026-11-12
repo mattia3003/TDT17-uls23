@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, cast
 
+import nibabel as nib
 import numpy as np
 import pandas as pd
 import torch
@@ -29,10 +31,12 @@ def predict_mask(model: nn.Module, image: torch.Tensor, roi_size: Sequence[int],
 
 def evaluate_cases(model: nn.Module, batches: Iterable[dict[str, Any]], device: torch.device,
                    roi_size: Sequence[int], inference_cfg: Mapping[str, Any], amp: bool,
-                   max_cases: int | None = None) -> pd.DataFrame:
+                   max_cases: int | None = None, save_dir: Path | None = None) -> pd.DataFrame:
     """Per-lesion metrics, raw and after keeping the centre component (``*_pp``), one row per VOI.
 
     ``batches`` must yield one VOI at a time (batch size 1), with the metadata of the eval transforms.
+    ``predict_s`` is the prediction time alone, ``seconds`` includes the metrics. With ``save_dir``,
+    each raw predicted mask is saved there as ``<case>.nii.gz``, on the VOI's own grid and affine.
     """
     model.eval()
     rows = []
@@ -42,13 +46,18 @@ def evaluate_cases(model: nn.Module, batches: Iterable[dict[str, Any]], device: 
         start = time.perf_counter()
         image = cast(MetaTensor, batch["image"])
         pred = predict_mask(model, image.to(device).float(), roi_size, inference_cfg, amp)[0].cpu().numpy()
+        predict_s = time.perf_counter() - start  # .cpu() waits for the GPU
         truth = batch["label"][0, 0].numpy() > 0
-        spacing = affine_to_spacing(image.affine[0], r=truth.ndim).tolist()
+        affine = image.affine[0]
+        spacing = affine_to_spacing(affine, r=truth.ndim).tolist()
+        if save_dir is not None:
+            save_dir.mkdir(parents=True, exist_ok=True)
+            nib.save(nib.Nifti1Image(pred.astype(np.uint8), affine.cpu().numpy()), save_dir / f"{batch['case'][0]}.nii.gz")
         raw = overlap_metrics(pred, truth)
         post = overlap_metrics(keep_centre_component(pred, spacing), truth)
         rows.append({"case": batch["case"][0], "dataset": batch["dataset"][0], **raw,
                      **{f"{k}_pp": v for k, v in post.items() if k != "true_voxels"},
-                     "seconds": time.perf_counter() - start})
+                     "predict_s": predict_s, "seconds": time.perf_counter() - start})
     return pd.DataFrame(rows)
 
 
