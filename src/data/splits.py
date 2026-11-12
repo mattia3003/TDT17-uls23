@@ -1,15 +1,14 @@
-"""Patient-grouped train/val/test splits, with the test cases taken from the official ULS23 split (D15).
+"""Train/val/test splits, with train and test taken from the course's folder split (D41).
 
-Split names: ``train`` and ``val`` (official training cases of the training datasets),
-``test`` (their official test cases) and ``heldout`` (every case of a held-out dataset, E2).
+Split names: ``train`` and ``val`` (course training cases of the training datasets),
+``test`` (their course test cases) and ``heldout`` (every case of a held-out dataset, E2).
+The course split is per lesion, not per patient, so ``patient_in_both`` marks patients with
+lesions in both course train and course test; validation is still drawn by patient.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
-import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -17,23 +16,29 @@ import pandas as pd
 
 from src.data.eda import usable_mask
 
-SPLIT_COLUMNS = ["dataset", "case", "patient_id", "split"]
+SPLIT_COLUMNS = ["dataset", "case", "patient_id", "split", "course_split", "patient_in_both", "image", "label"]
 
 
-def load_official_split(source: str, sha256: str) -> dict[str, list[str]]:
-    """Read the official split JSON (``{"train": [...], "test": [...]}``) from a URL or local file.
+def read_course_listing(path: str | Path) -> pd.DataFrame:
+    """One row per case from a listing of ``<dataset>/<train|test>/<images|labels>/<case>.nii.gz`` paths.
 
-    Raises if its SHA-256 differs from ``sha256``, so a changed upstream file is never used silently.
+    Returns ``dataset, case, course_split, image, label`` (paths relative to the data root).
+    Raises if a case lacks its image or label, or has them in different splits.
     """
-    if source.startswith(("http://", "https://")):
-        with urllib.request.urlopen(source, timeout=60) as response:
-            raw = response.read()
-    else:
-        raw = Path(source).read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if digest != sha256:
-        raise ValueError(f"SHA-256 of {source} is {digest}, expected {sha256}")
-    return json.loads(raw)
+    rows = []
+    for line in Path(path).read_text(encoding="utf-8").split():
+        dataset, split, kind, name = line.split("/")
+        rows.append({"dataset": dataset, "course_split": split, "kind": kind,
+                     "case": name.removesuffix(".nii.gz"), "path": line})
+    files = pd.DataFrame(rows)
+    paths = files.pivot(index=["dataset", "case"], columns="kind", values="path")
+    splits = files.pivot(index=["dataset", "case"], columns="kind", values="course_split")
+    bad = paths["images"].isna() | paths["labels"].isna() | (splits["images"] != splits["labels"])
+    if bad.any():
+        raise ValueError(f"{int(bad.sum())} cases lack an image or label, or have them in different splits, "
+                         f"e.g. {bad[bad].index[0]}")
+    return pd.DataFrame({"course_split": splits["images"], "image": paths["images"],
+                         "label": paths["labels"]}).reset_index()
 
 
 def grouped_sample(groups: pd.Series, fraction: float, rng: np.random.Generator) -> pd.Series:
@@ -52,23 +57,31 @@ def grouped_sample(groups: pd.Series, fraction: float, rng: np.random.Generator)
     return groups.isin(chosen)
 
 
-def make_splits(manifest: pd.DataFrame, official: Mapping[str, Sequence[str]], train_datasets: Sequence[str],
+def make_splits(manifest: pd.DataFrame, course: pd.DataFrame, train_datasets: Sequence[str],
                 heldout_datasets: Sequence[str], val_fraction: float, seed: int) -> pd.DataFrame:
     """Assign every usable case of the configured datasets to a split.
 
-    The validation cases are drawn per training dataset, grouped by patient, from the official
-    training cases. Raises if a training-dataset case is missing from the official split.
+    ``course`` is ``read_course_listing`` output. The validation cases are drawn per training
+    dataset, grouped by patient, from the course training cases. Raises if the usable cases of
+    the manifest and the course listing differ.
     """
-    cases = manifest.loc[usable_mask(manifest), ["dataset", "case", "patient_id"]]
-    side = {case: name for name, names in official.items() for case in names}
+    datasets = [*train_datasets, *heldout_datasets]
+    usable = manifest.loc[usable_mask(manifest), ["dataset", "case", "patient_id"]]
+    usable = usable[usable["dataset"].isin(datasets)]
+    cases = usable.merge(course[course["dataset"].isin(datasets)], on=["dataset", "case"],
+                         how="outer", validate="one_to_one", indicator=True)
+    unmatched = cases[cases["_merge"] != "both"]
+    if len(unmatched):
+        raise ValueError(f"{len(unmatched)} cases are only in the manifest or only in the course listing, "
+                         f"e.g. {unmatched['case'].iloc[0]} ({unmatched['_merge'].iloc[0]})")
+    sides = cases.groupby("patient_id")["course_split"].nunique()
+    cases["patient_in_both"] = cases["patient_id"].map(sides) > 1
+
     rng = np.random.default_rng(seed)
     parts: list[pd.DataFrame] = []
     for dataset in train_datasets:
         part = cases[cases["dataset"] == dataset].copy()
-        part["split"] = part["case"].map(side)
-        missing = part.loc[part["split"].isna(), "case"]
-        if len(missing):
-            raise ValueError(f"{len(missing)} {dataset} cases are not in the official split, e.g. {missing.iloc[0]}")
+        part["split"] = part["course_split"]
         train = part["split"] == "train"
         val = grouped_sample(part.loc[train, "patient_id"], val_fraction, rng)
         part.loc[val[val].index, "split"] = "val"
@@ -76,7 +89,7 @@ def make_splits(manifest: pd.DataFrame, official: Mapping[str, Sequence[str]], t
     for dataset in heldout_datasets:
         parts.append(cases[cases["dataset"] == dataset].assign(split="heldout"))
     splits = pd.concat(parts, ignore_index=True)[SPLIT_COLUMNS]
-    check_no_patient_leak(splits)
+    check_no_patient_leak(splits[splits["split"].isin(["train", "val"])])
     return splits.sort_values(["dataset", "case"], ignore_index=True)
 
 
@@ -89,7 +102,8 @@ def check_no_patient_leak(splits: pd.DataFrame) -> None:
 
 
 def split_summary(splits: pd.DataFrame) -> pd.DataFrame:
-    """Lesion and patient counts per dataset and split."""
+    """Lesion and patient counts per dataset and split, and how many lesions have a patient in both course splits."""
     return (splits.groupby(["dataset", "split"])
-            .agg(lesions=("case", "size"), patients=("patient_id", "nunique"))
+            .agg(lesions=("case", "size"), patients=("patient_id", "nunique"),
+                 patient_in_both=("patient_in_both", "sum"))
             .reset_index())

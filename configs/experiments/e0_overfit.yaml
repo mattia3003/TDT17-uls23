@@ -1,3 +1,5 @@
+# Record of E0 as run (D38). Since the course split (D41), 000156 and bone_00149 are test cases, so
+# this case list no longer runs as-is; it is kept as the record of the run, not rerun.
 # E0: overfit the 4 training VOIs of the real-file sample (data/sample), to check the pipeline can learn.
 # Done when the validation Dice on these same VOIs approaches 1. Runs on the home PC without copying data.
 include: [configs/experiments/e1_dynunet3d.yaml]

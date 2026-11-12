@@ -1,15 +1,13 @@
-# Gate 1 data decisions (D14, D15). Paths are relative to the repo root (small files, committed).
+# Split decisions (D14, D41). Paths are relative to the repo root (small files, committed).
 splits:
   path: splits/uls23_splits.csv
   manifest_path: data/manifest.csv
-  # Official ULS23 split, downloaded and checked, not copied into git (see REFERENCES.md).
-  # A local copy can be used instead: splits.official.source=path/to/train_test_split.json
-  official:
-    source: https://raw.githubusercontent.com/DIAGNijmegen/ULS23/f45a17259bdaaa87dc1a0aaf2f7004c292b73fc7/baseline_model/train_test_split.json
-    sha256: 4d781d5c1f5fae991295b41f5d4cc2d3a27cbd781071fae97f17ee0a6d135c0a
+  # Listing of the course's <dataset>/<train|test>/<images|labels>/ folders (12 Nov 2026), which
+  # define the train/test split and the file paths. How to remake it: see scripts/make_splits.py.
+  course_listing: splits/course_files.txt
   train_datasets: [ULS23_DeepLesion3D, ULS23_Radboudumc_Bone]
   heldout_datasets: [ULS23_Radboudumc_Pancreas]  # E2 only, never used for any selection
-  # Fraction of each training dataset's official training cases moved to validation, by patient.
+  # Fraction of each training dataset's course training cases moved to validation, by patient.
   val_fraction: 0.15
   # Split seed, separate from the training seed so the splits never change between runs.
   seed: 2311

@@ -111,7 +111,7 @@ These facts come from the public challenge material. The copy on IDUN may differ
 **Published reference point:** the semi-supervised ULS23 baseline reached Dice 0.703 ± 0.240 on the private challenge test set. This is context only, because our test split is a different population.
 
 **Per-lesion-type reference points (paper, Table 2, 10 % patient-level held-out training data; verify against the paper before quoting):**
-- **Bone (N = 86):** nnU-Net 0.674 ± 0.262. This is directly comparable to our Bone test lesions, which come from the same official split. Their models were trained on all of ULS23 (about 38k lesions), so a lower E1 result is expected.
+- **Bone (N = 86):** nnU-Net 0.674 ± 0.262. Since D41, our Bone test lesions come from the course split, not the official one, so this is a rough reference only. Their models were trained on all of ULS23 (about 38k lesions), so a lower E1 result is expected.
 - **Pancreas (N = 38):** 0.556–0.616. This pools Radboudumc Pancreas with MSD Pancreas, and the model was trained on pancreas data. For our zero-shot E2 it is an upper reference only.
 - **DeepLesion3D:** no per-dataset result is reported. It falls under "various lesions".
 
@@ -131,10 +131,10 @@ These affect whether the results are valid, so they stay in scope. Each one is a
 
 **Training data (confirmed at Gate 1, D14):** `ULS23_DeepLesion3D` + `ULS23_Radboudumc_Bone` (1440 lesions). `ULS23_Radboudumc_Pancreas` (120 lesions) is **held out from training entirely**, for E2.
 
-**Splits (confirmed at Gate 1, D15):**
-- *Test:* the official ULS23 test cases of the training datasets (159 lesions).
-- *Validation:* about 15 % of the official training cases, grouped by patient, with a fixed seed.
-- *E2:* all of Pancreas.
+**Splits (D15, replaced by D41 on 2026-11-12):**
+- *Test:* the course's test cases of the training datasets (149 DeepLesion3D + 140 Bone). The course split is per lesion, so many test lesions share a patient with training lesions (D41). E3 also reports the "clean" subset (`patient_in_both` false).
+- *Validation:* about 15 % of the course training cases, grouped by patient, with a fixed seed.
+- *E2:* all of Pancreas. The 24 Pancreas course-test lesions are also reported separately.
 
 Commit the derived split file.
 
@@ -190,7 +190,7 @@ The student decides at Gate 2 whether to run this, and can make the final call o
 - **Reference point:** quote the paper's per-lesion-type numbers (section 3) next to E1 for Bone, and as an upper reference for E2 Pancreas, with their caveats.
 - **Output:** save a per-lesion CSV, so new analyses don't require re-running inference.
 - **Selection:** use the validation split for model and threshold selection.
-- **Test data (D15):** the official challenge test set is hidden. "Test" therefore means the held-out cases of the public data in the official split, as in the paper's Table 2: about 10 % of each dataset, patient-grouped, used once at the end. It gives a development estimate, not a challenge score. The released ULS23 baseline weights were trained on these cases and must not be used on them.
+- **Test data (D41, replacing D15):** the official challenge test set is hidden. "Test" therefore means the course's test folders: 20 % of each dataset, split per lesion, and used once at the end. It gives a development estimate, not a challenge score. Many test lesions share a patient with training lesions, so also report the clean subset (`patient_in_both` false). The released ULS23 baseline weights were trained on all public cases and must not be used on them.
 - **Post-processing (D30):** report Dice with and without keeping only the predicted component at the VOI centre.
 
 ### Out of scope unless the student asks
@@ -262,6 +262,8 @@ Keep the 3–5 most useful figures for the video.
 > **Progress (2026-11-06, timing):** the IDUN timing run landed on a P100: 2.14 s per step, about 5× slower than the home PC. Data loading is not a bottleneck (D39).
 >
 > **Progress (2026-11-12):** on an A100, a training step takes 0.175 s, 12× faster than the P100 (D39). E1 is set to 250 epochs (about 11–12 h), with caching on and an A100, H100 or H200 GPU (D40).
+>
+> **Progress (2026-11-12, course split):** the first E1 job failed because the course staff had reorganised the data into course train/test folders. We switched to the course split, with Pancreas still held out (D41). The files are byte-identical to before, and the split file has been regenerated.
 >
 > **Next:** the student submits E1. While it trains, step 4 (`evaluate.py`) is written.
 
@@ -374,7 +376,7 @@ The structure is required by the assignment. Timings are suggestions.
 | 555 Bone VOIs stored shifted by +1024 (air near +23, not −1000) | Data-driven offset correction (D17), checked by the Bone-group breakdown in E3 |
 | Slice spacing 0.45–5 mm; the baseline did not resample | Keep the native grid (D16), checked by the spacing breakdown in E3 |
 | 98 % of lesions fit in 128×128×64; a few large Bone lesions do not | 128×128×64 patches plus sliding-window prediction on the full VOI (D19) |
-| Up to 21 lesions per Bone patient | Patient-grouped splits; the official split is reused (D15) |
+| Up to 21 lesions per Bone patient | Validation is patient-grouped. The course test split is per lesion, so 94 % of Bone test lesions share a patient with training: report this as a limitation, with a clean-subset breakdown (D41) |
 | Lesion intensities −905 to 1447 HU; padding down to −10405 | Clip to [−1000, 1500] and scale to [0, 1] (D18) |
 | Pancreas: large, low-contrast (4 HU) lesions from a different organ | Held out for the generalization test E2 (D14) |
 | Every lesion contains the VOI centre | Random patch positions; the centre prior is reported as a limitation (D19) |

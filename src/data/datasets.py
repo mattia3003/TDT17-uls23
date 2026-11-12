@@ -23,14 +23,18 @@ CACHE_WARNING = "You are using `torch.load` with `weights_only=False`"
 
 
 def case_table(manifest_path: str | Path, splits_path: str | Path) -> pd.DataFrame:
-    """The split file joined with the manifest: paths plus the metadata used for the E3 breakdowns."""
+    """The split file joined with the manifest's metadata (used for the E3 breakdowns).
+
+    Patient IDs and file paths come from the split file: the paths follow the course's
+    train/test folders (D41), while the manifest still holds the Phase 1 paths.
+    """
     splits = pd.read_csv(splits_path)
-    manifest = pd.read_csv(manifest_path).drop(columns="patient_id")
-    table = splits.merge(manifest, on=["dataset", "case"], how="left", validate="one_to_one")
-    missing = table.loc[table["image"].isna(), "case"]
+    manifest = pd.read_csv(manifest_path).drop(columns=["patient_id", "image", "label"])
+    table = splits.merge(manifest, on=["dataset", "case"], how="left", validate="one_to_one", indicator=True)
+    missing = table.loc[table["_merge"] != "both", "case"]
     if len(missing):
         raise ValueError(f"{len(missing)} split cases are not in the manifest, e.g. {missing.iloc[0]}")
-    return table
+    return table.drop(columns="_merge")
 
 
 def data_dicts(table: pd.DataFrame, data_root: str | Path, splits: Sequence[str],

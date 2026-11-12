@@ -83,7 +83,8 @@ def tiny_config(tmp_path: Path, run_name: str) -> dict[str, Any]:
     rows = [write_case(data, f"c{i}", i) for i in range(4)]
     pd.DataFrame(rows).assign(patient_id="unused").to_csv(tmp_path / "manifest.csv", index=False)
     pd.DataFrame({"dataset": "DS", "case": [r["case"] for r in rows], "patient_id": [f"DS:{i}" for i in range(4)],
-                  "split": ["train", "train", "train", "val"]}).to_csv(tmp_path / "splits.csv", index=False)
+                  "split": ["train", "train", "train", "val"], "image": [r["image"] for r in rows],
+                  "label": [r["label"] for r in rows]}).to_csv(tmp_path / "splits.csv", index=False)
     return {
         "seed": 0, "deterministic": True, "run": {"name": run_name},
         "machine": {"name": "test", "num_workers": 0},

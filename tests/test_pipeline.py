@@ -108,15 +108,17 @@ def test_cache_reads_do_not_warn_in_main_process_or_workers(tmp_path: Path, capf
 
 
 def test_case_table_and_data_dicts(tmp_path: Path) -> None:
-    pd.DataFrame({"dataset": ["A", "A", "A", "B"], "case": ["a1", "a2", "a3", "b1"],
-                  "patient_id": ["A:1", "A:1", "A:2", "B:1"], "split": ["train", "train", "val", "train"]},
+    cases = ["a1", "a2", "a3", "b1"]
+    pd.DataFrame({"dataset": ["A", "A", "A", "B"], "case": cases,
+                  "patient_id": ["A:1", "A:1", "A:2", "B:1"], "split": ["train", "train", "val", "train"],
+                  "image": [f"img/{c}.nii.gz" for c in cases], "label": [f"lab/{c}.nii.gz" for c in cases]},
                  ).to_csv(tmp_path / "splits.csv", index=False)
-    pd.DataFrame({"dataset": ["A", "A", "A", "B"], "case": ["a1", "a2", "a3", "b1"], "patient_id": ["x"] * 4,
-                  "image": [f"img/{c}.nii.gz" for c in ["a1", "a2", "a3", "b1"]],
-                  "label": [f"lab/{c}.nii.gz" for c in ["a1", "a2", "a3", "b1"]],
+    pd.DataFrame({"dataset": ["A", "A", "A", "B"], "case": cases, "patient_id": ["x"] * 4,
+                  "image": ["old/layout.nii.gz"] * 4, "label": ["old/layout.nii.gz"] * 4,
                   "spacing_z": [1.0, 5.0, 1.0, 0.8]}).to_csv(tmp_path / "manifest.csv", index=False)
     table = case_table(tmp_path / "manifest.csv", tmp_path / "splits.csv")
     assert table["patient_id"].tolist() == ["A:1", "A:1", "A:2", "B:1"]  # from the split file
+    assert table["image"].tolist() == [f"img/{c}.nii.gz" for c in cases]  # so are the paths
     assert "spacing_z" in table
     assert [i["case"] for i in data_dicts(table, tmp_path, ["train"])] == ["a1", "a2", "b1"]
     items = data_dicts(table, tmp_path, ["train"], cases=["b1", "a1"])

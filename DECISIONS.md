@@ -46,7 +46,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *Alternative considered:* holding out Bone. That is the more extreme shift, but it would cut training data to 863 lesions, and E2 would then mostly test sclerotic bone appearance.
 - *Limitation:* DeepLesion3D includes abdominal lesions, so E2 tests a new dataset, annotation protocol and lesion type, not entirely unseen anatomy.
 
-**D15. Splits:**
+**D15. Splits:** *(Train/test part superseded by D41 on 2026-11-12: the course now provides its own split. The reasoning below is kept as the record of the original choice.)*
 - *Test:* the official ULS23 test cases of the two training datasets (74 DeepLesion3D + 85 Bone).
 - *Validation:* about 15 % of the official training cases, grouped by patient, with its own fixed seed.
 - *E2 test:* all 120 Pancreas lesions, never used for any selection.
@@ -113,7 +113,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 **D24. Seeding goes through one function, `src/utils/seed.py`.** MONAI's `set_determinism` seeds Python, NumPy and PyTorch (CPU and CUDA) and sets cuDNN to deterministic. The function returns a seeded `torch.Generator` for the `DataLoader`. That fixes the shuffling order and the base seed that MONAI's default `worker_init_fn` uses to seed each worker's random transforms. The training seed (`seed` in `configs/base.yaml`) is separate from the split seed (`splits.seed`).
 - *Remaining non-determinism:* a few CUDA kernels, such as the backward pass of transposed 3-D convolutions and atomic adds, are not bit-exact between runs. Two runs with the same seed can therefore differ slightly. `deterministic: false` swaps reproducibility for cuDNN auto-tuning (faster).
 
-**D25. The split file is built by `scripts/make_splits.py` and committed as `splits/uls23_splits.csv`.**
+**D25. The split file is built by `scripts/make_splits.py` and committed as `splits/uls23_splits.csv`.** *(Inputs and result superseded by D41. The validation method is unchanged.)*
 - *Inputs:* the committed manifest, plus the official split, which is downloaded and checked against its SHA-256 on every run.
 - *Validation:* for each training dataset, whole patients are taken in a seeded random order, as long as the total stays within 15 % of that dataset's official training cases. Patients are sorted before shuffling, so the result depends only on the seed (2311). Doing this per dataset keeps both datasets at about 15 % (DeepLesion3D 100 of 669, Bone 92 of 612).
 - *Checks:* the script fails if a training-dataset case is missing from the official split, or if any patient ends up in two splits.
@@ -278,4 +278,47 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *GPU:* `slurm/train.slurm` requests `--constraint="a100|h100|h200"`.
   - *Why:* the student accepts any of the three. Allowing all three shortens the queue wait compared with A100 only. A Slurm constraint is an exact feature match, so `a100` alone would exclude the newer types.
   - *Trade-off:* runs on different types aren't directly comparable in time and energy. Each run's `compute.json` records the GPU model, and the report states it. If E4 is run, its cost comparison with E1 should use the same GPU type: pin it with `--constraint=<type>` on the command line, which overrides the script.
+
+## Phase 2: Course split
+
+**D41. Use the course's own train/test split (confirmed by the student, 2026-11-12). It replaces the official ULS23 split of D15 and D25. Pancreas stays held out (D14).**
+- *What happened:* the first E1 job (26089848) failed after 2 minutes with "file not found". On 11–12 Nov, the course staff had reorganised the dataset folder:
+  - The old `data/` + `annotations/` layout moved to `2_mic/ULS23_tmp/`.
+  - `2_mic/ULS23/` now holds `<dataset>/<train|test>/<images|labels>/`, i.e. a train/test split made by the course.
+  - The rename also explains why the pre-flight check on 6 Nov had passed.
+- *Same data:* the new folders hold exactly our 1560 labelled cases. All 3120 files have the same byte size as in the old layout. The only cases missing are the 58 unlabelled images, which D20 had already excluded. So the manifest, EDA and preprocessing decisions remain valid.
+- *Why switch:* the course provides this split, so we assume students are expected to use it. Results on a shared test set are what the course can compare.
+- *How the course split differs from the official one:* it is a random 20 % of each dataset, taken **per lesion, not per patient**. Only about 23 % of the old test cases are in the new test set, which is what chance alone gives.
+
+  | Dataset | Course train | Course test | Course test lesions whose patient also has lesions in course train |
+  |---|---|---|---|
+  | DeepLesion3D | 594 | 149 | 61 (41 %) |
+  | Bone | 557 | 140 | **132 (94 %)** |
+  | Pancreas | 96 | 24 | 1 |
+
+  For Bone the "patient" is the `bone_<id>` group (D10), which is at least the same CT study. So almost every Bone test lesion has another lesion from the same scan in the training data.
+- *Our splits (`splits/uls23_splits.csv`):*
+  - *test:* exactly the course test cases of DeepLesion3D and Bone.
+  - *val:* about 15 % of the course training cases, grouped by patient (seed 2311, as in D25), so no patient is in both train and val.
+  - *heldout:* all 120 Pancreas cases (E2). The split file also records each Pancreas case's course split, so the 24 Pancreas course-test lesions can be reported separately.
+
+  | Dataset | train | val | test | heldout |
+  |---|---|---|---|---|
+  | DeepLesion3D | 505 (392 patients) | 89 (74) | 149 (133) | – |
+  | Bone | 473 (121) | 84 (22) | 140 (82) | – |
+  | Pancreas | – | – | – | 120 (119) |
+
+  New columns: `course_split` (the course's train/test for every case); `patient_in_both` (the patient has lesions in both course splits); `image` and `label` (paths in the new layout). The course folder listing is committed as `splits/course_files.txt` (file names only), so the split file can be rebuilt without access to IDUN.
+- *Options considered:*
+  - **A (chosen):** use the course split as given. Report the patient overlap as a limitation, and in E3 also report the test results on the "clean" subset: test lesions with `patient_in_both` false (88 DeepLesion3D, 8 Bone).
+  - **B:** keep the course test set, but remove from training every lesion whose patient is in course test. That would remove 88 DeepLesion3D lesions and 412 of 557 Bone lesions. It gives a clean test set, but a much weaker Bone model and a setup that differs from the course's.
+  - Keeping the official split was rejected, to stay with the course's shared test set.
+  - Pancreas: P1 (chosen) keeps E2 as a held-out dataset. P2, training on all three datasets, would have dropped E2.
+- *Consequences and limitations for the report:*
+  - **Optimistic test scores, mostly for Bone.** A model can do well on a test lesion partly because it has seen the same patient's anatomy, scanner and lesion appearance in training. The clean-subset comparison in E3 shows how large the effect is. The Bone clean subset has only 8 lesions, so it's indicative at most.
+  - **Table 2 of the paper is no longer the same split.** The Bone comparison with Table 2 (0.674) is now only a rough reference, not a like-for-like one.
+  - **Validation doesn't share this overlap.** Val is grouped by patient, while test isn't. Validation Dice may therefore come out *lower* than test Dice, and this doesn't mean the model is better on test.
+  - **D18 used the old training split.** The intensity window was rounded from lesion percentiles of the old training split, which includes some of today's course test lesions. The window is a generic, rounded CT range (−1000 to 1500 HU), and no model was trained or selected on it, so the effect is negligible. It is still stated for transparency.
+  - **E0 (D37, D38) used the old split.** Two of its four lesions (`000156`, `bone_00149`) are now course test cases. E0 was only a pipeline check on discarded weights, so this has no effect on results. `e0_overfit.yaml` no longer runs as-is and is kept as the record of D38.
+- *Effect on E1 cost:* 978 training VOIs instead of 1089, so about 489 steps per epoch. 250 epochs (D40) then take about 10 h on an A100. Validation covers 173 VOIs instead of 192.
 
