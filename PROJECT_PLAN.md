@@ -261,7 +261,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-06, timing):** the IDUN timing run landed on a P100: 2.14 s per step, about 5× slower than the home PC. Data loading is not a bottleneck (D39).
 >
-> **Next:** choose the GPU type for E1 (D39), repeat the timing run on it if it's a new type, and then set the epoch count. After that, step 4 (`evaluate.py`) is written.
+> **Progress (2026-11-12):** on an A100, a training step takes 0.175 s, 12× faster than the P100 (D39). E1 is set to 250 epochs (about 11–12 h), with caching on and an A100, H100 or H200 GPU (D40).
+>
+> **Next:** the student submits E1. While it trains, step 4 (`evaluate.py`) is written.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.

@@ -253,5 +253,29 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 
 - *Interpretation:* the GPU is the bottleneck, not the data. With 8 workers, the cache isn't needed on IDUN. The P100 has no tensor cores, so mixed precision gains little there, while the 2080 Ti does have them.
 - *What it would mean for E1 on a P100:* an epoch of about 545 steps takes about 20 minutes, and validating the 192 VOIs takes about 14 minutes (every 10 epochs). A 24-hour job then fits about 65–70 epochs, or about 37 000 steps. E0 showed that small lesions are learned late (D38), so this is on the low side.
-- *GPUQ mixes GPU types:* the Phase 0 check got a V100, this run got a P100. The epoch count should therefore be based on the GPU type E1 actually runs on. The options are: request a faster type with a Slurm constraint and repeat the timing run on it; train E1 on the home PC (about 4 minutes per epoch, but it needs a data copy, see D31); or accept the P100 and resume across several 24-hour jobs. Decision pending.
+- *GPUQ mixes GPU types:* the Phase 0 check got a V100, this run got a P100. The epoch count should therefore be based on the GPU type E1 actually runs on. The options are: request a faster type with a Slurm constraint and repeat the timing run on it; train E1 on the home PC (about 4 minutes per epoch, but it needs a data copy, see D31); or accept the P100 and resume across several 24-hour jobs.
+- *A100 chosen and timed:* `sinfo` showed 5 GPU types on GPUQ (P100, V100, A100, H100, H200). A100 is the largest pool (about 100 GPUs), so queue waits should be short, and it has tensor cores. Using one type for all training also keeps time and energy comparable between runs. A repeat of the timing run with `--constraint=a100` (job 25948190) got an A100-SXM4-80GB:
+
+  | | P100 | A100 | Home PC |
+  |---|---|---|---|
+  | GPU time per step | 2.14 s | 0.175 s | 0.43 s |
+  | Data wait per step | 0.03 s | 0.065 s | about 0 (cache) |
+  | Whole epoch of 60 steps | 131 s | 15 s | – |
+  | Validation per VOI | 4.5 s | 1.3 s | 0.85 s |
+
+  On the A100, the data wait is about a quarter of the epoch time: the GPU is now fast enough that loading and decompressing the VOIs starts to matter. Part of it may be worker start-up, which 60 steps can't separate from steady-state loading.
+- *E1 cost on an A100:* an epoch of about 545 steps takes about 2.3 minutes, and validating the 192 VOIs about 4 minutes. With validation every 10 epochs, that's about 2.7 minutes per epoch on average.
+
+**D40. E1 settings (confirmed by the student, 2026-11-12): 250 epochs, caching on, and an A100 or newer GPU.**
+- *250 epochs:* about 136 000 steps, about 11–12 hours on an A100, so one job.
+  - *Why:* that's more than half of nnU-Net's default of 250 000 steps. Small lesions are learned late (D38), so a much shorter run risks undertraining them.
+  - *Alternatives:* 150 epochs (about 7 h) would be cheaper. 450 epochs (about 20 h, matching nnU-Net) would roughly double the energy. 250 also leaves time before the deadline for the optional E4 and E5.
+- *Caching on:* on an A100, the data wait was about 25 % of the epoch (D39).
+  - *Cost:* the cache stores each preprocessed VOI once, about 25 MB each, so about 32 GB in `/cluster/work`. The quota is 1 TB, of which 6.3 GB is used.
+  - *Results:* unchanged, since the cached data is exactly what the uncached chain produces (D37, tested).
+  - The first epoch is slower, because it builds the cache.
+  - `timing.yaml` keeps caching off, so it still measures loading from the raw files.
+- *GPU:* `slurm/train.slurm` requests `--constraint="a100|h100|h200"`.
+  - *Why:* the student accepts any of the three. Allowing all three shortens the queue wait compared with A100 only. A Slurm constraint is an exact feature match, so `a100` alone would exclude the newer types.
+  - *Trade-off:* runs on different types aren't directly comparable in time and energy. Each run's `compute.json` records the GPU model, and the report states it. If E4 is run, its cost comparison with E1 should use the same GPU type: pin it with `--constraint=<type>` on the command line, which overrides the script.
 

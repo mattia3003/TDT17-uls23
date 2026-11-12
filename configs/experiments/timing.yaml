@@ -4,6 +4,8 @@
 include: [configs/experiments/e1_dynunet3d.yaml]
 run:
   name: timing
+cache:
+  enabled: false  # measures loading from the raw files, as in D39
 train:
   epochs: 1
   max_steps_per_epoch: 60

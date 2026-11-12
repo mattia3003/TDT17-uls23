@@ -7,6 +7,7 @@
 #SBATCH --job-name=uls23-train
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:1
+#SBATCH --constraint="a100|h100|h200"
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=24:00:00

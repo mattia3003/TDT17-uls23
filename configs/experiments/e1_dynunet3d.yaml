@@ -6,3 +6,7 @@ include:
   - configs/model/dynunet3d.yaml
 run:
   name: e1_dynunet3d
+cache:
+  enabled: true  # about 32 GB in work_dir; the data wait was about 25 % of an A100 epoch without it (D39, D40)
+train:
+  epochs: 250  # about 136 000 steps, about 11-12 h on an A100 (D40)
