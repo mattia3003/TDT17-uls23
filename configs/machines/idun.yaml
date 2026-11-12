@@ -5,6 +5,6 @@ machine:
 
 paths:
   # Course copy of ULS23. Read-only: never write here.
-  data_root: /cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23
+  data_root: /cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23/data
   # Runs, checkpoints, caches and predictions (outside git). ${USER} is expanded at load time.
   work_dir: /cluster/work/${USER}/tdt17-uls23

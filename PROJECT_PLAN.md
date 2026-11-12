@@ -14,7 +14,7 @@
 | Also required | Code, configs and results retained and available on request |
 | Framework | PyTorch + MONAI (version >= 1.2.0, see section 3) |
 | Compute | NTNU IDUN cluster, with a home PC as fallback (see below) |
-| Data | `/cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23/` |
+| Data | `/cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23/data/` (moved there on 12 Nov 2026, D41) |
 
 ### Project goal: meet the requirements with minimum effort
 

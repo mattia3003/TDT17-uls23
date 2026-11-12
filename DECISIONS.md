@@ -277,6 +277,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - `timing.yaml` keeps caching off, so it still measures loading from the raw files.
 - *GPU:* `slurm/train.slurm` requests `--constraint="a100|h100|h200"`.
   - *Why:* the student accepts any of the three. Allowing all three shortens the queue wait compared with A100 only. A Slurm constraint is an exact feature match, so `a100` alone would exclude the newer types.
+  - *Memory (added after E1):* `sacct` showed a MaxRSS of 32.0 GB for E1, exactly the 32 GB requested, and Slurm kills a job that exceeds its request. The figure is a sum over the 8 data workers, so shared memory is partly counted twice. `slurm/train.slurm` now requests 64 GB, which leaves a margin and hardly affects queue time.
   - *Trade-off:* runs on different types aren't directly comparable in time and energy. Each run's `compute.json` records the GPU model, and the report states it. If E4 is run, its cost comparison with E1 should use the same GPU type: pin it with `--constraint=<type>` on the command line, which overrides the script.
 
 ## Phase 2: Course split
@@ -321,6 +322,12 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **D18 used the old training split.** The intensity window was rounded from lesion percentiles of the old training split, which includes some of today's course test lesions. The window is a generic, rounded CT range (−1000 to 1500 HU), and no model was trained or selected on it, so the effect is negligible. It is still stated for transparency.
   - **E0 (D37, D38) used the old split.** Two of its four lesions (`000156`, `bone_00149`) are now course test cases. E0 was only a pipeline check on discarded weights, so this has no effect on results. `e0_overfit.yaml` no longer runs as-is and is kept as the record of D38.
 - *Fail-fast added:* `train.py` now checks that every training and validation file exists, on the node that trains, before any GPU work. If not, it stops within seconds with "N of M image/label files are missing". The failed job above only found out when a data worker crashed.
+- *Second move, same split (12 Nov, 15:36–15:58):* the first evaluation jobs (26092329, 26092333) stopped after 1.5 minutes, because the fail-fast check found none of the files.
+  - *What changed:* the course had moved the split folders one level down, to `2_mic/ULS23/data/<dataset>/<train|test>/`, and removed `ULS23_tmp`. The course's `make_splits.ipynb` shows how its split was made: a random 80/20 per dataset (seed 42), copied from `data/<dataset>/images|labels`.
+  - *Check:* a fresh listing of the new folders is identical, line for line, to the committed `splits/course_files.txt`. So every case is in the same dataset, split and folder as before.
+  - *Fix:* only `paths.data_root` in `configs/machines/idun.yaml` changed, to `.../2_mic/ULS23/data`. The split file and code are unchanged.
+  - *E1 is unaffected:* it started at about 15:05 and read the original files only in its first epoch, before the move. After that it trained from its own cache.
+  - *Side effect:* the old layout that the manifest and EDA were built from is gone, so the EDA can't be rerun on IDUN as it is. Its results are committed.
 - *Effect on E1 cost:* 978 training VOIs instead of 1089, so about 489 steps per epoch. 250 epochs (D40) then take about 10 h on an A100. Validation covers 173 VOIs instead of 192.
 
 ## Phase 2: Evaluation script

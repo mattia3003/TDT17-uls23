@@ -20,7 +20,7 @@ Data, caches, checkpoints and predictions live outside git, under `paths.work_di
 
 On IDUN, `paths.data_root` holds the course's train/test split (D41): `<dataset>/<train|test>/<images|labels>/<case>.nii.gz`. Only the 3 novel ULS23 datasets are present. Training and evaluation take each case's file paths and split from `splits/uls23_splits.csv`. For the home PC, copy the same folders for the selected datasets and keep the folder structure.
 
-The manifest and EDA (Phase 1) were built from the course's earlier layout, `data/<dataset>/images/` and `annotations/<dataset>/labels/` (see `configs/data/uls23.yaml`). It is now in `2_mic/ULS23_tmp`, and its files are byte-identical. To rerun the EDA on IDUN, pass `paths.data_root=/cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23_tmp`. The real-file sample in `data/sample/ULS23` holds both layouts.
+The manifest and EDA (Phase 1) were built from the course's earlier layout, `data/<dataset>/images/` and `annotations/<dataset>/labels/` (see `configs/data/uls23.yaml`). The course removed that layout on 12 Nov 2026, so the EDA can't be rerun on IDUN as it is. Its results are committed, and the files were byte-identical (D41). The real-file sample in `data/sample/ULS23` holds both layouts.
 
 `splits/course_files.txt` lists the course folders. To rebuild the split file after the course data changes, see `scripts/make_splits.py`.
 

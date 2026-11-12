@@ -4,12 +4,13 @@
 #   sbatch --time=00:30:00 slurm/train.slurm configs/experiments/timing.yaml
 #   sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml
 #   sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml --resume   # continue after a time limit
+# Memory: E1 peaked at 32.0 GB MaxRSS (summed over 8 data workers), so 64G leaves a margin.
 #SBATCH --job-name=uls23-train
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:1
 #SBATCH --constraint="a100|h100|h200"
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x-%j.out
 

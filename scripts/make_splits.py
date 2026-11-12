@@ -2,7 +2,7 @@
 
 Light: reads data/manifest.csv and the committed listing of the course folders. The listing is
 made on IDUN, from the folder that holds the dataset folders (only file names are read):
-    cd /cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23
+    cd /cluster/projects/vc/courses/TDT17/2026/2_mic/ULS23/data
     find . -name "*.nii.gz" | sed "s|^\\./||" | sort > ~/course_files.txt
 
 Example:
