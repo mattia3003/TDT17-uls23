@@ -320,5 +320,6 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **Validation doesn't share this overlap.** Val is grouped by patient, while test isn't. Validation Dice may therefore come out *lower* than test Dice, and this doesn't mean the model is better on test.
   - **D18 used the old training split.** The intensity window was rounded from lesion percentiles of the old training split, which includes some of today's course test lesions. The window is a generic, rounded CT range (−1000 to 1500 HU), and no model was trained or selected on it, so the effect is negligible. It is still stated for transparency.
   - **E0 (D37, D38) used the old split.** Two of its four lesions (`000156`, `bone_00149`) are now course test cases. E0 was only a pipeline check on discarded weights, so this has no effect on results. `e0_overfit.yaml` no longer runs as-is and is kept as the record of D38.
+- *Fail-fast added:* `train.py` now checks that every training and validation file exists, on the node that trains, before any GPU work. If not, it stops within seconds with "N of M image/label files are missing". The failed job above only found out when a data worker crashed.
 - *Effect on E1 cost:* 978 training VOIs instead of 1089, so about 489 steps per epoch. 250 epochs (D40) then take about 10 h on an A100. Validation covers 173 VOIs instead of 192.
 

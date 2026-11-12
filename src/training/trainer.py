@@ -24,7 +24,7 @@ import torch
 from torch import nn
 from torch.amp.grad_scaler import GradScaler
 
-from src.data.datasets import build_dataset, build_loader, cache_dir, case_table, data_dicts
+from src.data.datasets import build_dataset, build_loader, cache_dir, case_table, check_files_exist, data_dicts
 from src.data.transforms import eval_transforms, train_transforms
 from src.evaluation.inference import evaluate_cases, mean_by_dataset
 from src.models.factory import build_model
@@ -121,6 +121,7 @@ def fit(cfg: Mapping[str, Any], resume: bool = False) -> Path:
     train_tf = train_transforms(intensity, cfg["transforms"])
     train_items = data_dicts(table, root, ["train"], cases)
     val_items = data_dicts(table, root, vcfg["splits"], cases)
+    check_files_exist([*train_items, *val_items])  # on the node that trains, before any GPU work
     train_loader = build_loader(build_dataset(train_items, train_tf, cache), tcfg["batch_size"], True, workers, generator)
     val_loader = build_loader(build_dataset(val_items, eval_transforms(intensity), cache), 1, False, workers)
     print(f"Run {run_dir} on {device}: {len(train_items)} training and {len(val_items)} validation VOIs")

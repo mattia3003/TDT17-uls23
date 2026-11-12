@@ -54,6 +54,14 @@ def data_dicts(table: pd.DataFrame, data_root: str | Path, splits: Sequence[str]
             for image, label, case, ds in zip(rows["image"], rows["label"], rows["case"], rows["dataset"])]
 
 
+def check_files_exist(items: Sequence[Mapping[str, str]]) -> None:
+    """Raise if any image or label is missing, so a moved dataset fails in seconds with a clear message."""
+    missing = [path for item in items for path in (item["image"], item["label"]) if not Path(path).is_file()]
+    if missing:
+        raise FileNotFoundError(f"{len(missing)} of {2 * len(items)} image/label files are missing or unreadable, "
+                                f"e.g. {missing[0]}. Has the dataset moved? Check paths.data_root and the split file.")
+
+
 def cache_dir(work_dir: str | Path, intensity_cfg: Mapping[str, Any]) -> Path:
     """Cache folder named by a hash of the preprocessing settings, so changed settings get a new cache."""
     key = json.dumps({"version": PREPROCESSING_VERSION, "intensity": intensity_cfg}, sort_keys=True)

@@ -11,7 +11,8 @@ import pytest
 import torch
 from monai.data import MetaTensor
 
-from src.data.datasets import build_dataset, build_loader, cache_dir, case_table, data_dicts, silence_cache_warning
+from src.data.datasets import (build_dataset, build_loader, cache_dir, case_table, check_files_exist, data_dicts,
+                               silence_cache_warning)
 from src.data.transforms import eval_transforms, from_specs, train_transforms
 from src.models.factory import build_model
 from src.utils.config import load_yaml
@@ -126,6 +127,14 @@ def test_case_table_and_data_dicts(tmp_path: Path) -> None:
     assert items[0]["image"] == str(tmp_path / "img/a1.nii.gz")
     with pytest.raises(ValueError, match="not in splits"):
         data_dicts(table, tmp_path, ["train"], cases=["a3"])  # a3 is a validation case
+
+
+def test_check_files_exist_reports_missing_files(tmp_path: Path) -> None:
+    item = write_voi(tmp_path, "v", 0.0)
+    check_files_exist([item])
+    Path(item["label"]).unlink()
+    with pytest.raises(FileNotFoundError, match="1 of 2 image/label files"):
+        check_files_exist([item])
 
 
 def test_repo_dynunet_config_builds_and_runs() -> None:
