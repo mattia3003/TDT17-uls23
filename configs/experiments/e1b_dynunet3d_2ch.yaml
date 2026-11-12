@@ -1,0 +1,13 @@
+# E1b: E1 with a second input channel in a soft-tissue window (D43). Everything else is as in E1, so the
+# comparison isolates the input. E1 missed most low-contrast DeepLesion3D lesions (< 50 HU from their
+# surroundings), which take up about 1 % of the wide -1000 to 1500 HU window.
+include:
+  - configs/experiments/e1_dynunet3d.yaml
+run:
+  name: e1b_dynunet3d_2ch
+data:
+  intensity:
+    extra_windows:
+      - [-160, 240]  # soft tissue (width 400, level 40), the EDA display window (D23)
+model:
+  in_channels: 2  # wide window (D18) + soft-tissue window

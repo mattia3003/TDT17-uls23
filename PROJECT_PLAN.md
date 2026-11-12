@@ -269,7 +269,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-12, epoch-100 check):** val Dice was 0.160 at epoch 100 and 0.185 at epoch 110, rising about 0.02 per 10 epochs, so E1 continues. The qualitative-examples script is written (D42).
 >
-> **Next:** E1 finishes, then Gate 2: evaluate on val, look at the figures, and decide whether the setup needs a fix.
+> **Progress (2026-11-12, Gate 2):** E1 reached val Dice 0.244 (0.406 after D30) and only 0.34 (0.53) on its own training lesions, so it underfits. It misses most low-contrast lesions (< 50 HU): 73 % of them on val. The student chose one targeted retrain, E1b, with a second input channel in a soft-tissue window (D43).
+>
+> **Next:** the student trains E1b. E1 and E1b are then compared on validation, and one model goes to the test split.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.

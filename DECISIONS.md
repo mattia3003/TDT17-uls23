@@ -349,3 +349,51 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - Each lesion gets two panels on its largest label slice: a zoom around the lesion, and the whole VOI slice, so false positives away from the lesion are visible. The label is outlined in amber and the raw prediction in blue. The display windows and offset correction are the same as in the EDA gallery (D23).
   - On the sample, the outlines matched the anatomy, which confirms that the saved masks keep the VOI's orientation.
 
+## Phase 3: E1 and Gate 2
+
+**D43. E1 underfits and misses low-contrast lesions. Gate 2: one targeted retrain, E1b, with a second input channel in a soft-tissue window (confirmed by the student, 2026-11-12).**
+- *E1 run:* job 26090388, 250 epochs in 4.3 h on an A100, 1.41 kWh (COMPUTE_LOG).
+  - Best val Dice 0.244 raw and 0.406 after D30, both at the last epoch.
+  - The epoch-100 check passed: Dice was 0.16–0.19 and still rising.
+  - The centre-component Dice was roughly flat (0.36–0.42) from epoch 140, so most of the late gain came from fewer false positives. More epochs would not have fixed the core problem.
+- *Underfitting test:* `evaluate.py` on the training split as well as on val.
+
+  | | Training split (978) | Validation (173) |
+  |---|---|---|
+  | Raw Dice, mean | 0.340 | 0.244 |
+  | Centre-component Dice, mean (median) | 0.529 (0.692) | 0.406 (0.443) |
+  | Lesions missed (centre-component Dice < 0.05) | 25 % | 40 % |
+
+  The model reaches only 0.53 even on lesions it trained on, while E0 showed that the network can memorise lesions (0.90). So the main problem is underfitting, with a smaller generalisation gap on top. The val evaluation reproduced the training log's 0.244 exactly.
+- *Where it fails* (from `per_lesion.csv` and the figures):
+  - **Contrast is the strongest factor.** For DeepLesion3D validation lesions:
+
+    | Lesion–shell contrast | Missed (val) | Missed (train) | Centre-component Dice (val) |
+    |---|---|---|---|
+    | < 50 HU | 73 % | 58 % | 0.14 |
+    | 50–100 HU | 44 % | 27 % | 0.42 |
+    | > 100 HU | 26 % | 8 % | 0.54 |
+
+  - **By category:** Kidney lesions are missed 91 % of the time and Liver lesions 67 % (val), against 9 % for bone-type lesions. The 12 worst validation lesions are all faint DeepLesion3D soft-tissue lesions, with no prediction at the centre.
+  - **Slice spacing has no effect.** Lesions on 1 mm and 5 mm slices score the same (0.38 against 0.37 on val, 0.50 against 0.48 on train). This rules out anisotropy, which had been a suspect.
+  - **Size matters less than contrast.** Lesions under 10 mm do somewhat worse.
+  - **False positives:** the predicted volume is about 2.3× the true lesion volume (median). Precision rises from 0.21 to 0.52 after D30, so the false positives sit mostly away from the target.
+  - **D30 can hurt:** for `bone_00149_lesion_07`, the model found part of the lesion but not the part with the centre, and D30 kept another component. Raw Dice was 0.19, and 0.00 after D30. This goes into the failure review.
+  - **Context:** the DeepLesion3D lesions were chosen as the ones a standard nnU-Net handled worst (course README). The ULS23 baseline also trained on about 38 000 lesions, not 978, so part of the gap is expected.
+- *Why the input:* in the wide −1000 to 1500 HU window (D18), a 30 HU lesion–tissue difference is about 1 % of the input range. Instance normalisation largely cancels a linear rescaling, but not clipping. A soft-tissue window clips away air and bone, so faint differences fill a large part of the range. Using only a soft-tissue window would saturate the dense bone lesions, which E1 handles well. Two channels keep both.
+- *Options presented:*
+  - **A:** accept E1 and explain its limits. It costs nothing, and the analysis above is useful for the video.
+  - **B (chosen):** a second input channel. It tests the observed failure directly, and E1 against E1b makes a clean comparison for the video and the reflection.
+  - **C:** deep supervision. It is a general nnU-Net improvement, but not aimed at the observed failure.
+  - Anisotropy-aware strides were dropped after the spacing breakdown. More epochs were dropped because the centre-component Dice had plateaued.
+- *E1b setup (`configs/experiments/e1b_dynunet3d_2ch.yaml`):*
+  - The input gets two channels: the D18 window and a soft-tissue window of −160 to 240 HU (the EDA display window, D23). Each channel is clipped and scaled to [0, 1].
+  - The model's `in_channels` is 2. Everything else is identical to E1, which a unit test checks: the configs differ only in `extra_windows`, `in_channels` and `run.name`.
+  - *Code:* `WindowChannelsd` in `src/data/transforms.py` makes one channel per window. With one window it is exactly the old `ScaleIntensityRanged` (also tested), so E1's preprocessing and cache are unchanged. The cache key includes the windows, so E1b gets its own cache of about 55 GB.
+  - *Side effect:* the intensity augmentations act on both channels in the same units, so ±0.02 means ±50 HU in the wide channel but ±8 HU in the soft-tissue channel. This is kept, since the augmentation is mild.
+- *How E1 and E1b are compared:* on validation only, with the same breakdowns (contrast, category, size). The test split is evaluated once, after one model has been chosen.
+  - *Selection metric (confirmed by the student, 2026-11-12):* the model with the higher mean centre-component Dice on validation goes to test. Raw Dice is reported alongside it.
+  - The reason is that D30 is part of the method, and raw Dice is dominated by false positives that D30 removes.
+  - This does not change D36: within each run, `best.pt` is still chosen by raw Dice.
+- *Real-file check before IDUN:* E1b trained one epoch on the two sample training lesions on the home PC. The validation check, the epoch and the checkpoint all ran: "2 training and 2 validation VOIs", 1.2 s per VOI, peak GPU memory 4.6 GB. So the 2-channel input runs through the whole pipeline, and the extra channel doesn't change memory use noticeably.
+

@@ -1,7 +1,8 @@
 """Config-driven MONAI transform chains for training and evaluation.
 
 Both chains start with the same deterministic preprocessing: load, offset correction (D17),
-clip and scale to [0, 1] (D18). It ends in compact dtypes (image float16, label uint8), so a
+clip and scale to [0, 1] (D18), with one channel per HU window when ``extra_windows`` is set
+(D43). It ends in compact dtypes (image float16, label uint8), so a
 ``PersistentDataset`` cache stays small; float16 changes intensities by at most about 1 HU.
 Training then samples patches (D19), casts to float32 and applies the configured augmentations.
 """
@@ -33,14 +34,36 @@ class CorrectIntensityOffsetd(mt.MapTransform):
         return d
 
 
+class WindowChannelsd(mt.MapTransform):
+    """One channel per HU window ``(low, high)``, each clipped and scaled to [0, 1] (D18, D43).
+
+    With a single window this is exactly ``ScaleIntensityRanged``, so single-channel runs are unchanged.
+    """
+
+    def __init__(self, keys: Sequence[Hashable] | Hashable, windows: Sequence[Sequence[float]]) -> None:
+        super().__init__(keys)
+        self.scalers = [mt.ScaleIntensityRange(a_min=low, a_max=high, b_min=0.0, b_max=1.0, clip=True)
+                        for low, high in windows]
+
+    def __call__(self, data: Mapping[Hashable, Any]) -> dict[Hashable, Any]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = torch.cat([torch.as_tensor(scale(d[key])) for scale in self.scalers], dim=0)
+        return d
+
+
+def input_windows(intensity_cfg: Mapping[str, Any]) -> list[Sequence[float]]:
+    """The ``clip`` window (D18), then any ``extra_windows`` (D43): one input channel each."""
+    return [intensity_cfg["clip"], *(intensity_cfg.get("extra_windows") or [])]
+
+
 def preprocessing(intensity_cfg: Mapping[str, Any]) -> list[mt.Transform]:
     """Deterministic part, shared by training and evaluation (and cached when caching is on)."""
-    low, high = intensity_cfg["clip"]
     return [
         mt.LoadImaged(keys=KEYS),
         mt.EnsureChannelFirstd(keys=KEYS),  # also drops the stored trailing size-1 axis (D11)
         CorrectIntensityOffsetd(keys="image", intensity_cfg=intensity_cfg),
-        mt.ScaleIntensityRanged(keys="image", a_min=low, a_max=high, b_min=0.0, b_max=1.0, clip=True),
+        WindowChannelsd(keys="image", windows=input_windows(intensity_cfg)),
         mt.EnsureTyped(keys="image", dtype=torch.float16),
         mt.EnsureTyped(keys="label", dtype=torch.uint8),
     ]

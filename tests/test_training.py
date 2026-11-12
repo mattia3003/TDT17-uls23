@@ -166,6 +166,16 @@ def test_evaluate_run_matches_validation_and_saves_masks(tmp_path: Path, monkeyp
     assert pd.read_csv(figures / "examples.csv")["pick"].tolist() == ["worst", "median", "best"]
 
 
+def test_two_channel_input_trains_and_evaluates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    cfg = tiny_config(tmp_path, "two_channels")
+    cfg["data"]["intensity"]["extra_windows"] = [[-160, 240]]
+    cfg["model"]["in_channels"] = 2
+    cfg["train"]["epochs"] = 1
+    run_dir = trainer.fit(cfg)
+    assert pd.read_csv(evaluate_run(cfg, run_dir, ["val"]) / "per_lesion.csv")["case"].tolist() == ["c3"]
+
+
 def test_pick_examples_and_worst_lesions() -> None:
     lesions = pd.DataFrame({"dataset": ["A"] * 4 + ["B"], "case": ["a1", "a2", "a3", "a4", "b1"],
                             "dice": [0.9, 0.1, 0.5, 0.7, 0.3]})

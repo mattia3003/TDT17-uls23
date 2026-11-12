@@ -4,6 +4,7 @@ import warnings
 from pathlib import Path
 from typing import cast
 
+import monai.transforms as mt
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -15,7 +16,8 @@ from src.data.datasets import (build_dataset, build_loader, cache_dir, case_tabl
                                silence_cache_warning)
 from src.data.transforms import eval_transforms, from_specs, train_transforms
 from src.models.factory import build_model
-from src.utils.config import load_yaml
+from src.training.checkpoint import config_differences
+from src.utils.config import load_config, load_yaml
 
 REPO = Path(__file__).resolve().parents[1]
 SHAPE = (64, 64, 32)
@@ -47,6 +49,22 @@ def test_eval_transforms_correct_offset_and_scale(tmp_path: Path, offset: float)
     assert float(image[(0, *CENTER)]) == pytest.approx(0.44, abs=1e-3)  # float16 step near 0.44
     assert set(torch.unique(label).tolist()) == {0.0, 1.0}
     assert image.affine.shape == (4, 4)  # metadata kept for saving predictions
+
+
+def test_extra_window_adds_a_channel_and_one_window_is_unchanged(tmp_path: Path) -> None:
+    item = write_voi(tmp_path, "v", 0.0)
+    single = cast(dict[str, MetaTensor], eval_transforms(INTENSITY_CFG)(item))["image"]
+    reference = mt.Compose([mt.LoadImaged(keys="image"), mt.EnsureChannelFirstd(keys="image"),
+                            mt.ScaleIntensityRanged(keys="image", a_min=-1000, a_max=1500, b_min=0.0, b_max=1.0,
+                                                    clip=True), mt.EnsureTyped(keys="image", dtype=torch.float16)])
+    assert torch.equal(single, cast(dict[str, torch.Tensor], reference({"image": item["image"]}))["image"])
+
+    two = cast(dict[str, MetaTensor], eval_transforms({**INTENSITY_CFG, "extra_windows": [[-160, 240]]})(item))["image"]
+    assert tuple(two.shape) == (2, *SHAPE) and torch.equal(two[:1], single)
+    # Soft-tissue channel: air clips to 0, and the 100 HU lesion maps to 260/400 = 0.65.
+    assert float(two[1].min()) == 0.0 and float(two[(1, *CENTER)]) == pytest.approx(0.65, abs=1e-3)
+    assert two.affine.shape == (4, 4)  # metadata kept for saving predictions
+    assert cache_dir(tmp_path, {**INTENSITY_CFG, "extra_windows": [[-160, 240]]}) != cache_dir(tmp_path, INTENSITY_CFG)
 
 
 def test_train_transforms_give_patches_that_contain_the_lesion(tmp_path: Path) -> None:
@@ -142,6 +160,16 @@ def test_repo_dynunet_config_builds_and_runs() -> None:
     with torch.no_grad():
         out = model(torch.zeros(1, 1, 64, 64, 32))  # smallest size with a bottleneck above 1 voxel
     assert tuple(out.shape) == (1, 2, 64, 64, 32)
+
+
+def test_repo_e1b_config_differs_from_e1_only_in_the_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(REPO)  # includes are relative to the repo root
+    e1 = load_config(["configs/experiments/e1_dynunet3d.yaml"])
+    e1b = load_config(["configs/experiments/e1b_dynunet3d_2ch.yaml"])
+    assert config_differences(e1, e1b) == ["data.intensity.extra_windows", "model.in_channels", "run.name"]
+    model = build_model(e1b["model"]).eval()
+    with torch.no_grad():
+        assert tuple(model(torch.zeros(1, 2, 64, 64, 32)).shape) == (1, 2, 64, 64, 32)
 
 
 def test_factory_builds_2d_model_and_rejects_unknown_names() -> None:
