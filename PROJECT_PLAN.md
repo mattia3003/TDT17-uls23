@@ -271,7 +271,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-12, Gate 2):** E1 reached val Dice 0.244 (0.406 after D30) and only 0.34 (0.53) on its own training lesions, so it underfits. It misses most low-contrast lesions (< 50 HU): 73 % of them on val. The student chose one targeted retrain, E1b, with a second input channel in a soft-tissue window (D43).
 >
-> **Next:** the student trains E1b. E1 and E1b are then compared on validation, and one model goes to the test split.
+> **Progress (2026-11-13, E1b):** E1b reached val Dice 0.261 (0.454 after D30) against E1's 0.244 (0.406). The gain comes from rescued low-contrast DeepLesion3D lesions, as intended (paired Wilcoxon p = 0.002). E1b is the final model, with no further training before the test (D44).
+>
+> **Next:** the student evaluates E1b once on the test split and on Pancreas (E2). Then E3 breakdowns, the energy estimate and the final figures.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
@@ -289,8 +291,8 @@ Keep the 3–5 most useful figures for the video.
 
 ### Phase 3: Training
 
-- [ ] The student trains **E1**.
-- [ ] Inspect the curves and some predictions, and fix any bugs.
+- [x] The student trains **E1**.
+- [x] Inspect the curves and some predictions, and fix any bugs. *(No bugs. E1 underfits low-contrast lesions, so the student chose one targeted retrain, E1b (D43). E1b is the final model (D44).)*
 
 **🚦 Gate 2: is the model credible?** A retrain is only worthwhile if there is a clear bug or a clear flaw in the setup. Modest performance is acceptable if it's well explained.
 

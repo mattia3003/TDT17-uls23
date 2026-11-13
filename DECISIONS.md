@@ -278,6 +278,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *GPU:* `slurm/train.slurm` requests `--constraint="a100|h100|h200"`.
   - *Why:* the student accepts any of the three. Allowing all three shortens the queue wait compared with A100 only. A Slurm constraint is an exact feature match, so `a100` alone would exclude the newer types.
   - *Memory (added after E1):* `sacct` showed a MaxRSS of 32.0 GB for E1, exactly the 32 GB requested, and Slurm kills a job that exceeds its request. The figure is a sum over the 8 data workers, so shared memory is partly counted twice. `slurm/train.slurm` now requests 64 GB, which leaves a margin and hardly affects queue time.
+    - *Corrected after E1b:* E1b's MaxRSS was 61.3 GB against its 64 GB request, so MaxRSS again filled whatever was requested. Neither job was killed, although both reached their limits. So most of this figure is file cache from reading the cache files (about 32 GB for E1, about 55 GB for E1b), which the system frees as needed, not memory the job truly needs. The Phase 1 EDA showed the same (MaxRSS ≈ data read, COMPUTE_LOG). The 64 GB request is kept as a harmless margin, but the original risk was smaller than it looked.
   - *Trade-off:* runs on different types aren't directly comparable in time and energy. Each run's `compute.json` records the GPU model, and the report states it. If E4 is run, its cost comparison with E1 should use the same GPU type: pin it with `--constraint=<type>` on the command line, which overrides the script.
 
 ## Phase 2: Course split
@@ -396,4 +397,50 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - The reason is that D30 is part of the method, and raw Dice is dominated by false positives that D30 removes.
   - This does not change D36: within each run, `best.pt` is still chosen by raw Dice.
 - *Real-file check before IDUN:* E1b trained one epoch on the two sample training lesions on the home PC. The validation check, the epoch and the checkpoint all ran: "2 training and 2 validation VOIs", 1.2 s per VOI, peak GPU memory 4.6 GB. So the 2-channel input runs through the whole pipeline, and the extra channel doesn't change memory use noticeably.
+
+**D44. E1b beats E1 on validation, mainly on low-contrast DeepLesion3D lesions. E1b is the final model and goes to the test split, with no further training first (confirmed by the student, 2026-11-13).**
+- *E1b run:* job 26092482, 250 epochs in 5.0 h, 1.16 kWh. It ran on an A100-PCIE-40GB, not the SXM4-80GB that E1 used, so time and energy are not directly comparable (COMPUTE_LOG). Best val Dice at the last epoch, as in E1. E1b's centre-component Dice was higher than E1's at most validation epochs from epoch 80, so the gain is not one lucky epoch.
+- *Result, the same lesions for both models:*
+
+  | Centre-component Dice, mean (median) | E1 | E1b |
+  |---|---|---|
+  | Validation, all (173) | 0.406 (0.443) | **0.454 (0.570)** |
+  | Validation, DeepLesion3D (89) | 0.367 (0.249) | **0.425 (0.493)** |
+  | Validation, Bone (84) | 0.447 (0.485) | **0.486 (0.583)** |
+  | Training split, all (978) | 0.529 (0.692) | 0.554 (0.709) |
+  | Validation lesions missed (< 0.05) | 40 % | 32 % |
+
+  Raw val Dice rose from 0.244 to 0.261 (DeepLesion3D 0.248 to 0.281, Bone unchanged at 0.240).
+- *Paired comparison on validation:*
+  - **How many lesions changed.** 43 lesions improved by more than 0.05, 22 got worse by more than 0.05, and 108 stayed within 0.05.
+  - **Missed lesions.** 21 lesions that E1 missed were found by E1b, and 7 went the other way.
+  - **The median change is 0,** so the gain comes from rescued lesions, not from a general shift.
+  - **Significance.** A Wilcoxon signed-rank test gives p = 0.002. A bootstrap over lesions gives a 95 % interval of +0.014 to +0.083 for the mean gain.
+  - **Per dataset.** DeepLesion3D p = 0.01, Bone p = 0.08.
+- *The gain follows contrast, as the D43 hypothesis predicted:*
+
+  | DeepLesion3D, by lesion–shell contrast | Val: missed, E1 → E1b | Val: Dice change | Train: Dice change |
+  |---|---|---|---|
+  | < 20 HU | 71 % → 57 % | +0.13 | +0.09 |
+  | 20–50 HU | 75 % → 55 % | +0.12 | +0.07 |
+  | 50–100 HU | 44 % → 38 % | 0.00 | +0.01 |
+  | > 100 HU | 26 % → 22 % | +0.08 | +0.01 |
+
+  The training split (505 DeepLesion3D lesions) confirms the pattern with far more lesions. The val gain above 100 HU (23 lesions) is not seen on train, so it is probably noise.
+- *By category:*
+  - **Liver** improved most: on the training split, Dice rose from 0.28 to 0.53 and the missed rate fell from 59 % to 19 %. Val has only 6 Liver lesions; they went from 0.26 to 0.38.
+  - **Kidney** is still the hardest: 82 % missed on val (91 % for E1), and slightly worse on train. Its failures may be about telling lesion from kidney tissue, not about the window.
+  - **Bone** gains less (+0.04 val, +0.02 train), as expected, since bone lesions mostly have high contrast already.
+- *Caveats:*
+  - **One seed per model.** The 22 lesions that got worse, some from about 0.7 to 0, show that two runs can differ a lot per lesion. The overall gain is significant, but the size of the effect is uncertain.
+  - **Still underfitting.** Training-split Dice is only 0.55, and the best epoch was the last one in both runs.
+  - **More false positives.** E1b's predicted volume is a median 3.1× the lesion volume on val (E1: 2.35×). Raw Dice stays low because of these blobs elsewhere in the VOI. The median examples score raw 0.17 and 0.13 but 0.85 and 0.88 after D30. D30 removes most of the blobs, which is part of why the centre-component Dice is the selection metric (D43).
+- *Choice:* under the selection metric confirmed in D43, E1b wins (0.454 against 0.406).
+- *No further training before the test.*
+  - **Option:** a longer E1b run, since both runs were still improving at epoch 250. It would cost about 10 h of A100 time plus queueing.
+  - **Why not:** with two weeks to the deadline, the E1 → E1b comparison and its analysis matter more for the report and video than a few hundredths of Dice.
+  - **Report:** the remaining underfitting and the false positives go in as findings and future work.
+  - **Consequence:** the test split is now used once, for E1b, so no later model can be compared on it.
+- *Optional experiments:* E4 and E5 were not run before the test. E5 (more seeds of E1b) could still be run afterwards, since it only measures run-to-run spread and selects nothing.
+- *Compute for the comparison:* val and training-split evaluation of E1b took 0.034 h and 0.157 h of script time, 0.028 kWh in total (COMPUTE_LOG).
 
