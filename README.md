@@ -146,6 +146,13 @@ python scripts/analyse.py compare work/e1_val_per_lesion.csv work/e1b_val_per_le
 python scripts/analyse.py compare work/e1_train_per_lesion.csv work/e1b_train_per_lesion.csv --names E1 E1b --out results/e1_vs_e1b_train
 python scripts/analyse.py breakdown work/e1b_test_per_lesion.csv --out results/e3_test
 python scripts/analyse.py breakdown work/e1b_heldout_per_lesion.csv --out results/e2_pancreas
+python scripts/analyse.py heldout work/e1b_heldout_per_lesion.csv --reference work/e1b_train_per_lesion.csv work/e1b_val_per_lesion.csv work/e1b_test_per_lesion.csv --dataset ULS23_DeepLesion3D --out results/e2_pancreas
+```
+
+**Summary figures** for the report and video are drawn from those tables and the two runs' `log.csv` files (copied to `work/`). They go to `results/figures/` (D49):
+
+```powershell
+python scripts/report_figures.py --logs work/e1_log.csv work/e1b_log.csv
 ```
 
 `--splits` and `--cases` read every word after them until the next `--option`. Any `key=value` overrides must therefore come after another option, such as `--machine` or `--checkpoint best`. Otherwise they're read as split names and rejected.

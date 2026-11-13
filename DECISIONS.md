@@ -460,7 +460,20 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **The cache made training cheaper.** The data wait was about 1 s per epoch, so the GPU was busy almost all the time, and the runs were shorter than they would have been without it.
   - **GPU type matters as much as the method.** E1b ran on an A100-PCIE-40GB. It used about 18 % less energy per run than E1 on the SXM4-80GB, but took about 16 % longer, part of which is the extra input channel.
   - **Not tried:** a 2D model, smaller patches, or a subset of the data. Each could cut the cost, and each would probably lose some accuracy (untested).
-  - **Inference is cheap:** 0.3–0.45 s per VOI, about 0.02 Wh of GPU energy. So most of the energy goes into training, not into using the model. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
+  - **Inference is cheap:** 0.3–0.45 s per VOI, about 0.02 Wh of GPU energy.
+
+**D49. Four summary figures for the report and video, drawn by `scripts/report_figures.py` from the results tables and training logs (confirmed by the student, 2026-11-13).**
+- *Figures* (`results/figures/`):
+  - **`training_curves.png`:** validation Dice per epoch for E1 and E1b, raw and centre component. E1b leads on the selection metric from about epoch 80.
+  - **`missed_by_contrast.png`:** the fraction of lesions missed per contrast bin, E1 against E1b, on validation and on the training split, per dataset. This is the core of the E1 → E1b story (D43, D44).
+  - **`test_breakdown.png`:** the final model on the test split, by contrast for both datasets and by DeepLesion3D category (D47).
+  - **`e2_pancreas.png`:** the fraction of Pancreas tumours missed, next to DeepLesion3D lesions of similar contrast and size (D47).
+  - The example panels come from `scripts/qualitative.py` (D46).
+- *Reproducible tables:* the E2 comparison table is now made by a third `analyse.py` command, `heldout` (`results/e2_pancreas/heldout_comparison.csv`). The figure script reads only the `results/` tables and the logs, so every number in the figures also exists as a CSV.
+- *Colour:* the datasets keep their EDA colours (DeepLesion3D blue, Bone orange, Pancreas green), so a colour means the same thing in every figure. The models get two other slots of the same palette: E1 pink and E1b purple.
+  - A grey "baseline" for E1 was tried first, but it failed the palette validator's chroma check (grey can't carry identity).
+  - The pink/purple pair passes every check, except that pink is below 3:1 contrast against the background. So E1 is always named in a legend or label.
+- *Checks:* a unit test draws all four figures from small synthetic tables. Each figure was opened and checked for clipped titles and overlapping labels. So most of the energy goes into training, not into using the model. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
 
 ## Phase 3: E1 and Gate 2
 

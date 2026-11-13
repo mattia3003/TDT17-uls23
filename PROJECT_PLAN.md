@@ -279,7 +279,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-13, energy):** E4 and E5 are not run. Energy: 2.75 kWh measured on GPUs, about 5.9 kWh in total, about 31 km of EV driving (D48).
 >
-> **Next:** the final figures, then the video script and slides (section 8).
+> **Progress (2026-11-13, figures):** four summary figures in `results/figures/`, drawn from the results tables (D49).
+>
+> **Next:** the example panels with the new spacing, then the video script and slides (section 8).
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
@@ -320,7 +322,7 @@ The student also decides here whether to run **optional E4 (2D vs 3D)** and **op
 - [ ] If E5 was run, evaluate every seed and report the mean ± standard deviation across runs.
 - [x] Measure inference time per VOI. *(0.45 s on a V100, 0.31–0.35 s on an A100-PCIE.)*
 - [x] Complete the energy estimate (section 7). *(About 5.9 kWh in total (range 4.3–5.9), about 31 km of EV driving; COMPUTE_LOG.md, D48.)*
-- [ ] Create final figures, including best, median and worst examples.
+- [ ] Create final figures, including best, median and worst examples. *(Summary figures done in `results/figures/` (D49). Still to do: rerun `qualitative.py` on IDUN for the new row spacing and copy the example panels.)*
 
 ### Phase 5: Video and submission
 

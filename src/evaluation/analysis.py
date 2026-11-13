@@ -67,6 +67,24 @@ def breakdown(lesions: pd.DataFrame) -> pd.DataFrame:
                          for factor in FACTORS for dataset, level, rows in groups(d, factor)])
 
 
+def heldout_comparison(reference: pd.DataFrame, heldout: pd.DataFrame, faint_hu: float = 20, large_mm: float = 15,
+                       clear_hu: float = 40) -> pd.DataFrame:
+    """The held-out lesions (E2) next to reference lesions of similar contrast and size, all scored by the same
+    model (D47): does contrast or size explain the held-out failure?"""
+    ref, held = prepare(reference), prepare(heldout)
+    faint = ref["abs_contrast_hu"] <= faint_hu
+    groups = [
+        ("reference, all", ref),
+        (f"reference, contrast <= {faint_hu:g} HU", ref[faint]),
+        (f"reference, contrast <= {faint_hu:g} HU and >= {large_mm:g} mm", ref[faint & (ref["lesion_eq_diam_mm"] >= large_mm)]),
+        (f"reference Abdominal, contrast <= {faint_hu:g} HU", ref[faint & (ref["category"] == "Abdominal")]),
+        ("held out, all", held),
+        (f"held out, contrast > {clear_hu:g} HU", held[held["abs_contrast_hu"] > clear_hu]),
+    ]
+    return pd.DataFrame([{"group": name, "datasets": "+".join(sorted(rows["dataset"].unique())), **lesion_stats(rows)}
+                         for name, rows in groups])
+
+
 def pair(a: pd.DataFrame, b: pd.DataFrame, names: tuple[str, str]) -> pd.DataFrame:
     """One row per lesion with both models' metrics (suffixed with ``names``) and the change ``delta`` in
     centre-component Dice from the first model to the second. Both CSVs must hold exactly the same lesions."""

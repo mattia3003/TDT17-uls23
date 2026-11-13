@@ -1,10 +1,13 @@
 """Tests for the breakdown and paired-comparison tables on small synthetic per-lesion tables."""
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.evaluation.analysis import BOOTSTRAP_RESAMPLES, breakdown, paired_comparison, wilcoxon_p
+from src.evaluation import report_figures as rf
+from src.evaluation.analysis import BOOTSTRAP_RESAMPLES, breakdown, heldout_comparison, paired_comparison, wilcoxon_p
 
 
 def lesions(dice_pp: list[float]) -> pd.DataFrame:
@@ -40,6 +43,28 @@ def test_breakdown_groups_bins_and_missed() -> None:
     assert row(table, "category", "DeepLesion3D", "Liver")["lesions"] == 2
     assert not ((table["factor"] == "category") & (table["dataset"] == "Bone")).any()  # no category, left out
     assert row(table, "intensity_group", "Bone", "shifted")["lesions"] == 1
+
+
+def test_heldout_comparison_groups() -> None:
+    reference = lesions([0.0, 0.8, 0.04, 0.6, 1.0, 0.0]).iloc[:4]       # DeepLesion3D only
+    heldout = lesions([0.0] * 6).assign(dataset="ULS23_Radboudumc_Pancreas", lesion_shell_contrast_hu=[5, 50, -60, 0, 1, 2])
+    table = heldout_comparison(reference, heldout).set_index("group")
+    assert table.loc["reference, all", "lesions"] == 4
+    assert table.loc["reference, contrast <= 20 HU", "lesions"] == 1                # only the 10 HU lesion
+    assert table.loc["held out, contrast > 40 HU", "lesions"] == 2                  # 50 and -60 HU
+    assert table.loc["held out, all", "missed"] == 1.0 and table.loc["held out, all", "datasets"] == "Pancreas"
+
+
+def test_report_figures_draw_from_the_tables(tmp_path: Path) -> None:
+    a, b = lesions([0.0, 0.8, 0.0, 0.6, 0.9, 0.5]), lesions([0.7, 0.8, 0.0, 0.4, 0.93, 0.0])
+    paired, _ = paired_comparison(a, b, ("E1", "E1b"))
+    log = pd.DataFrame({"epoch": [1, 2], "val_dice_all": [np.nan, 0.2], "val_dice_pp_all": [np.nan, 0.3]})
+    rf.training_curves({"E1": log, "E1b": log}, tmp_path / "curves.png")
+    rf.missed_by_contrast({"validation": paired}, ["E1", "E1b"], tmp_path / "contrast.png")
+    rf.test_breakdown(breakdown(b), tmp_path / "test.png")
+    held = a.assign(dataset="ULS23_Radboudumc_Pancreas")
+    rf.heldout_comparison(heldout_comparison(a.iloc[:4], held), tmp_path / "e2.png")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["contrast.png", "curves.png", "e2.png", "test.png"]
 
 
 def test_paired_comparison_counts_and_statistics() -> None:
