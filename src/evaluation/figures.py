@@ -103,7 +103,7 @@ def plot_lesions(picks: pd.DataFrame, items: Mapping[str, Mapping[str, str]], pr
                  title: str) -> None:
     """Two panels per lesion, ``per_row`` lesions per figure row, under a title saying how they were chosen."""
     n_rows = max(1, -(-len(picks) // per_row))
-    fig, axes = plt.subplots(n_rows, 2 * per_row, figsize=(5.2 * per_row, 3.0 * n_rows), squeeze=False)
+    fig, axes = plt.subplots(n_rows, 2 * per_row, figsize=(5.2 * per_row, 3.3 * n_rows), squeeze=False)
     for ax in axes.flat:
         ax.set_axis_off()
     for i, (_, row) in enumerate(picks.iterrows()):
@@ -115,7 +115,7 @@ def plot_lesions(picks: pd.DataFrame, items: Mapping[str, Mapping[str, str]], pr
                         Line2D([], [], color=PREDICTION, label="prediction (raw)")],
                loc="lower center", ncol=2)
     fig.suptitle(title, fontsize=10, color=INK_2)
-    fig.tight_layout(rect=(0, 0.04, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.04, 1, 0.97), h_pad=2.0)  # room for each row's two-line titles
     fig.savefig(path, dpi=150)
     plt.close(fig)
 

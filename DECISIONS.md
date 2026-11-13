@@ -381,7 +381,65 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **`partial.png`:** the same, drawn from lesions with centre-component Dice from 0.05 to 0.5. This is where boundary errors and partly found lesions show up, which `worst.png` cannot show.
   - Every figure now has a title saying how its lesions were chosen. `worst.png` is kept, and its title says that ties are broken by case name.
   - `--sample` and `--seed` change the size and the seed of the samples.
-- *Checks:* a unit test checks that the sample is per dataset, stays within its Dice band, isn't simply the first lesions by name, and is the same on every run. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
+- *Checks:* a unit test checks that the sample is per dataset, stays within its Dice band, isn't simply the first lesions by name, and is the same on every run.
+- *Figure layout:* row spacing was increased after the first test figures, because each row's titles overlapped the images above them.
+
+## Phase 4: Test, E2 and E3
+
+**D47. Results of the final model E1b: test split (once), E2 on Pancreas and the E3 failure review (review checked by the student, 2026-11-13).**
+- *Test split* (`results/e3_test/breakdown.csv`, job 26098860):
+
+  | | Lesions | Raw Dice | Centre-component Dice, mean (median) | Missed |
+  |---|---|---|---|---|
+  | All | 289 | 0.258 | 0.418 (0.424) | 36 % |
+  | DeepLesion3D | 149 | 0.279 | 0.412 (0.557) | 41 % |
+  | Bone | 140 | 0.236 | 0.424 (0.400) | 31 % |
+  | DeepLesion3D, patient not in course train | 88 | 0.261 | 0.385 | |
+
+  - **Test against val:** test is a little below val (0.418 against 0.454). That is expected, since the model was chosen on val, and each split has only about 150 lesions per dataset.
+  - **Bone:** 94 % of the Bone test lesions share a patient with training (D41), yet Bone scored lower on test than on the patient-grouped val. So the overlap did not visibly inflate the result. The clean Bone subset has only 8 lesions, too few to report on its own.
+- *Breakdowns (test):*
+  - **Contrast is the strongest factor.** DeepLesion3D lesions under 50 HU are missed about 61 % of the time (51 lesions), against 26 % above 100 HU.
+  - **By category:** Liver (73 % missed), Kidney (71 %) and Abdominal (61 %) are the weak categories. Bone-type lesions in DeepLesion3D are missed only 12 % of the time.
+  - **Small lesions:** more than half of lesions under 10 mm are missed in both datasets.
+  - **Slice spacing has no effect,** as on val (D43).
+  - **Volume:** the predicted volume is a median 4.3× the lesion's in Bone (12× under 10 mm). DeepLesion3D lesions over 30 mm get only 0.08× (5 lesions).
+- *E3 failure review* (`results/e3_test/failure_review.csv`, D46 samples): one primary type per lesion, read from the figures by Claude and checked by the student.
+
+  | Missed (20) | Lesions | | Partly found (20) | Lesions |
+  |---|---|---|---|---|
+  | Low contrast (faint soft tissue, or lytic in bone) | 10 | | Under-segmented: right lesion, only part of it | 12 |
+  | Model segments a nearby structure | 4 | | Boundary error on a small lesion | 5 |
+  | Small (5–6 mm) | 2 | | Prediction mostly on a nearby structure | 3 |
+  | Unusual appearance or location | 2 | | | |
+  | Found only a tiny part | 2 | | | |
+
+  - **Low contrast explains half the misses, in both datasets.** Lytic or faint bone lesions (−98 to +43 HU against their shell) fail the same way as faint soft-tissue lesions.
+  - **Under-segmentation explains most partial finds.** The model finds the most visible part, for example the dense part of a mixed bone lesion, and stops there.
+  - **Nearby structures (7 of 40):** the model segments a vessel, rib or node beside the lesion. Nothing tells the model that the lesion is at the VOI centre, so a centre prior is a concrete idea for future work.
+  - **Repeated studies fail alike.** The same lesion in two studies of one patient fails the same way: the chest-wall lesion is missed twice, and the 000658 node is under-segmented to about 0.3 twice.
+  - **No clear annotation errors** in the 40.
+  - **Limitation:** each lesion was judged on one slice by one reader.
+- *E2: Pancreas, zero-shot* (`results/e2_pancreas/breakdown.csv`, job 26098861):
+  - **Result:** mean Dice 0.001 over 120 tumours, with 119 missed.
+  - **The model does predict something:** a median of about 2 800 voxels per VOI. But only 6 predictions touch the tumour at all, and the predicted volume is a median 0.31× the tumour's.
+  - **Not a bug:**
+    - the labels lie on the visible darker mass in the figures;
+    - the same pipeline scores 0.42 on the test split;
+    - Pancreas is stored in HU, so no intensity correction is involved.
+  - **Size and contrast do not explain it alone.** Comparison with DeepLesion3D lesions evaluated by the same model (train, val and test):
+
+    | Lesions | n | Missed |
+    |---|---|---|
+    | DeepLesion3D, contrast ≤ 20 HU | 98 | 56 % |
+    | DeepLesion3D, contrast ≤ 20 HU and ≥ 15 mm | 25 | 44 % (39 % on training lesions) |
+    | DeepLesion3D Abdominal, contrast ≤ 20 HU | 31 | 74 % |
+    | Pancreas, contrast median 4 HU, median 27 mm | 120 | 99 % |
+    | Pancreas tumours with contrast > 40 HU | 7 | 100 % |
+
+    So Pancreas fails far more often than DeepLesion3D lesions with similar contrast and size. Pancreatic tumours are faint and ill-defined inside an organ the training data barely covers, so their whole appearance is new to the model. Two weaknesses seen in E3 are at their extreme here: low contrast and under-segmentation of large lesions.
+  - **Caveat:** the lesion–shell contrast compares a tumour with a shell that can include fat and vessels. It is not the contrast against the pancreas itself.
+- *A mask-based location analysis* (where exactly the Pancreas predictions land) *was not done.* The figures already show small blobs on kidney, bowel and vessels away from the tumour, and the comparison above answers the main question. The time goes to the report instead. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
 
 ## Phase 3: E1 and Gate 2
 

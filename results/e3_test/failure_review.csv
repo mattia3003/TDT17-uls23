@@ -1,0 +1,41 @@
+figure,pick,case,dataset,primary_type,note
+missed,missed 1,000148_08_01_030_lesion_01,DeepLesion3D,unusual appearance or location,chest-wall nodule; same lesion also missed in study 09
+missed,missed 2,000358_03_01_073_lesion_01,DeepLesion3D,low contrast,49 HU; between bowel loops and vessels
+missed,missed 3,000956_01_01_063_lesion_01,DeepLesion3D,low contrast,-29 HU; faint lesion inside a homogeneous organ
+missed,missed 4,001394_02_01_298_lesion_01,DeepLesion3D,nearby structure,142 HU but lies against brighter bowel or vessel and blends with it
+missed,missed 5,001551_01_02_196_lesion_01,DeepLesion3D,nearby structure,6.7 mm lung nodule touching hilar vessels
+missed,missed 6,002176_01_01_052_lesion_01,DeepLesion3D,low contrast,46.5 HU; also small (7 mm)
+missed,missed 7,002197_03_01_012_lesion_01,DeepLesion3D,low contrast,42 HU mediastinal node; prediction on an adjacent structure
+missed,missed 8,003171_12_01_016_lesion_01,DeepLesion3D,unusual appearance or location,ground-glass lung nodule (dark in the soft-tissue window)
+missed,missed 9,004363_01_01_206_lesion_01,DeepLesion3D,low contrast,30 HU; 20 mm paravertebral mass
+missed,missed 10,004408_01_01_256_lesion_01,DeepLesion3D,low contrast,-5 HU liver lesion
+missed,missed 11,bone_00209_lesion_08,Bone,found only a tiny part,small blob inside the vertebral lesion; centre-component Dice rounds to 0
+missed,missed 12,bone_00245_lesion_01,Bone,found only a tiny part,33 mm lesion filling the vertebral body; prediction at its edge
+missed,missed 13,bone_00280_lesion_05,Bone,low contrast,-9 HU against the bone shell; 26 mm pelvic lesion
+missed,missed 14,bone_00497_lesion_02,Bone,small,5 mm; predictions elsewhere
+missed,missed 15,bone_00523_lesion_03,Bone,nearby structure,prediction on both iliac bones instead of the sacral lesion
+missed,missed 16,bone_00639_lesion_03,Bone,low contrast,lytic (-98 HU) vertebral lesion; prediction on the other side of the vertebra
+missed,missed 17,bone_00696_lesion_03,Bone,low contrast,43 HU rib lesion
+missed,missed 18,bone_00734_lesion_02,Bone,low contrast,lytic (-51 HU) vertebral lesion
+missed,missed 19,bone_01083_lesion_09,Bone,nearby structure,prediction on the neighbouring rib
+missed,missed 20,bone_01140_lesion_06,Bone,small,6 mm
+partial,partial 1,000215_05_01_096_lesion_01,DeepLesion3D,under-segmented,57 mm pelvic mass at 13 HU; 7 % of its volume predicted
+partial,partial 2,000632_01_01_076_lesion_01,DeepLesion3D,nearby structure,prediction split over the lesion and an adjacent blob; D30 keeps a small piece
+partial,partial 3,000655_01_01_033_lesion_01,DeepLesion3D,under-segmented,lung lesion; a quarter covered; false positives elsewhere
+partial,partial 4,000658_02_01_008_lesion_01,DeepLesion3D,under-segmented,22 mm mediastinal node; about a third predicted
+partial,partial 5,000658_04_02_011_lesion_01,DeepLesion3D,under-segmented,same node as partial 4 in a later study; same result
+partial,partial 6,001154_01_01_075_lesion_01,DeepLesion3D,boundary,5 mm liver lesion at 8 HU; prediction offset and too large
+partial,partial 7,001867_01_01_047_lesion_01,DeepLesion3D,boundary,8 mm lung nodule; partial overlap
+partial,partial 8,002406_01_02_354_lesion_01,DeepLesion3D,under-segmented,prediction covers only the inner part
+partial,partial 9,003171_11_01_066_lesion_01,DeepLesion3D,boundary,lung nodule; prediction includes an attached vessel
+partial,partial 10,004161_01_03_017_lesion_01,DeepLesion3D,nearby structure,prediction mostly on the vessel above; small overlap
+partial,partial 11,bone_00149_lesion_08,Bone,under-segmented,mixed lesion; the dense part is found and the lytic part missed
+partial,partial 12,bone_00273_lesion_20,Bone,under-segmented,42 mm scapular lesion; 42 % of its volume predicted
+partial,partial 13,bone_00283_lesion_04,Bone,under-segmented,only the upper part found
+partial,partial 14,bone_00305_lesion_12,Bone,boundary,prediction shifted towards the densest part
+partial,partial 15,bone_00316_lesion_04,Bone,under-segmented,vertebral lesion; about half predicted
+partial,partial 16,bone_00411_lesion_01,Bone,under-segmented,lytic vertebral lesion; about half predicted
+partial,partial 17,bone_00818_lesion_08,Bone,boundary,7 mm; centre found reasonably; raw Dice low from false positives elsewhere
+partial,partial 18,bone_00892_lesion_01,Bone,under-segmented,33 mm lesion at 3 HU; 42 % predicted; false positive on the next bone
+partial,partial 19,bone_01072_lesion_02,Bone,nearby structure,6 mm; large false positives elsewhere (60x the lesion volume)
+partial,partial 20,bone_01083_lesion_03,Bone,under-segmented,vertebral lesion; part found plus the adjacent bone

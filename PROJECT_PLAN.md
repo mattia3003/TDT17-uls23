@@ -275,7 +275,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-13, test and E2):** E1b was evaluated once on the test split: Dice 0.258 raw and 0.418 centre component, against 0.261 and 0.454 on val. On all 120 Pancreas lesions (E2), Dice is about 0.001. The model predicts something in every VOI, but almost never on the tumour.
 >
-> **Next:** E3 breakdowns and the worst-case review, the E2 failure analysis, the energy estimate and the final figures. Decide whether to run E5.
+> **Progress (2026-11-13, E3 and E2):** breakdowns and a review of 40 randomly sampled test lesions. Low contrast causes half the misses, and under-segmentation explains most partial finds. Pancreas fails far more often than DeepLesion3D lesions of similar contrast and size (D47).
+>
+> **Next:** the energy estimate, the final figures and the report. Decide whether to run E5.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
@@ -309,7 +311,7 @@ The student also decides here whether to run **optional E4 (2D vs 3D)** and **op
 
 - [x] Evaluate once on the test split. *(E1b, 2026-11-13.)*
 - [x] **E2:** evaluate on the held-out dataset. *(Dice about 0.001; analysis still to do.)*
-- [ ] **E3:** produce the breakdown tables, and review the worst 10–20 cases by failure type (small lesion, low contrast, boundary error, annotation issue, nearby lesion).
+- [x] **E3:** produce the breakdown tables, and review the worst 10–20 cases by failure type (small lesion, low contrast, boundary error, annotation issue, nearby lesion). *(`scripts/analyse.py` (D45); 40 sampled lesions reviewed (D46, D47).)*
 - [ ] If E4 was run, evaluate both models on the same test lesions and produce the comparison.
 - [ ] If E5 was run, evaluate every seed and report the mean ± standard deviation across runs.
 - [ ] Measure inference time per VOI.
