@@ -25,7 +25,38 @@ The training code records elapsed time and `nvidia-smi` power samples. On IDUN, 
 
 ## Totals and assumptions
 
-To be filled in during Phase 4:
+Completed 2026-11-13, when all planned jobs were done (D48).
 
-- Overhead factor for CPU, memory and cooling, with its source.
-- EV consumption figure (kWh/100 km), with its source.
+**Method.** The GPU energy is measured (the table above). The rest of each node and the data centre are estimated with the Green Algorithms model (Lannelongue et al. 2021):
+
+energy = elapsed time × (cores × power per core + memory in GB × 0.3725 W/GB) × PUE, plus the measured GPU energy before the PUE is applied.
+
+| Assumption | Value | Source and reasoning |
+|---|---|---|
+| CPU cores | 8 per job, fully used | The Slurm request. Full use is an upper bound. |
+| Power per core | 7.5 W (low case 3.5 W) | Server CPU TDP per core. Intel Xeon Gold 6148: 150 W / 20 cores = 7.5 W. AMD EPYC 7742: 225 W / 64 cores = 3.5 W. The CPU model of each IDUN node was not recorded, so this is a range. |
+| Memory power | 0.3725 W per GB requested | Green Algorithms (measured). Uses the requested memory, not MaxRSS: 32 GB, or 64 GB for E1b. |
+| PUE (cooling, power distribution) | 1.67 (low case 1.2) | 1.67 is the 2019 global data-centre average used by Green Algorithms (Uptime Institute). IDUN's own PUE was not found. A Nordic centre is probably lower, so 1.67 is conservative. 1.2 is an assumed low case, with no source. |
+| Home PC | PUE 1, same CPU and memory model | Green Algorithms recommends PUE 1 for a personal computer. |
+| Elapsed time | Slurm elapsed | Covers the whole allocation, including start-up and idle time. |
+| EV consumption | 19.1 kWh/100 km | EV Database: average real-world consumption over all listed electric cars, 191 Wh/km (accessed 2026-11-13). |
+
+**Totals** (central case: 7.5 W per core, PUE 1.67):
+
+| Group | Jobs | GPU, measured (kWh) | Estimated total (kWh) | EV distance |
+|---|---|---|---|---|
+| Training | E1, E1b | 2.57 | 5.51 | 29 km |
+| Evaluation | val, training split, test and Pancreas, both models | 0.074 | 0.19 | 1 km |
+| Development | Environment check, EDA (CPU), E0 on the home PC, timing runs, failed jobs | 0.105 | 0.19 | 1 km |
+| **All** | | **2.75** | **5.9** | **31 km** |
+
+- **Range:** 5.3 kWh (28 km) with 3.5 W per core, and 4.3 kWh (22 km) with PUE 1.2. So the whole project used roughly **4–6 kWh, about 20–30 km of EV driving**.
+- **The two training runs are 94 % of it.** E1b alone, the targeted retrain, cost about 2.6 kWh (14 km).
+
+**Not included:**
+- development on the home PC (unit tests, sample checks, a few seconds of GPU each);
+- light work on the IDUN login node (figures, `git`);
+- the energy to build and cool the hardware (embodied energy);
+- conversion to CO₂, because the assignment asks for energy.
+
+**Inference cost:** 0.45 s per VOI on a V100 and 0.31–0.35 s on an A100-PCIE, about 0.02 Wh of GPU energy per VOI (146–165 W measured).

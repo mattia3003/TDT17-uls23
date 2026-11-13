@@ -277,7 +277,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-13, E3 and E2):** breakdowns and a review of 40 randomly sampled test lesions. Low contrast causes half the misses, and under-segmentation explains most partial finds. Pancreas fails far more often than DeepLesion3D lesions of similar contrast and size (D47).
 >
-> **Next:** the energy estimate, the final figures and the report. Decide whether to run E5.
+> **Progress (2026-11-13, energy):** E4 and E5 are not run. Energy: 2.75 kWh measured on GPUs, about 5.9 kWh in total, about 31 km of EV driving (D48).
+>
+> **Next:** the final figures, then the video script and slides (section 8).
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
@@ -304,6 +306,8 @@ The student also decides here whether to run **optional E4 (2D vs 3D)** and **op
 
 ### Phase 3b: Optional experiments
 
+*Not run (D48): the project focuses on E1 → E1b, the test split, E2 and E3.*
+
 - [ ] **E4:** add the 2D config and any 2D-specific slice sampling. The student trains the 2D model.
 - [ ] **E5:** add configs for the extra seeds. The student trains the extra runs, after the final configuration is settled.
 
@@ -314,8 +318,8 @@ The student also decides here whether to run **optional E4 (2D vs 3D)** and **op
 - [x] **E3:** produce the breakdown tables, and review the worst 10–20 cases by failure type (small lesion, low contrast, boundary error, annotation issue, nearby lesion). *(`scripts/analyse.py` (D45); 40 sampled lesions reviewed (D46, D47).)*
 - [ ] If E4 was run, evaluate both models on the same test lesions and produce the comparison.
 - [ ] If E5 was run, evaluate every seed and report the mean ± standard deviation across runs.
-- [ ] Measure inference time per VOI.
-- [ ] Complete the energy estimate (section 7).
+- [x] Measure inference time per VOI. *(0.45 s on a V100, 0.31–0.35 s on an A100-PCIE.)*
+- [x] Complete the energy estimate (section 7). *(About 5.9 kWh in total (range 4.3–5.9), about 31 km of EV driving; COMPUTE_LOG.md, D48.)*
 - [ ] Create final figures, including best, median and worst examples.
 
 ### Phase 5: Video and submission

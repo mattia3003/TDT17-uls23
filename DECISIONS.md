@@ -439,7 +439,28 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 
     So Pancreas fails far more often than DeepLesion3D lesions with similar contrast and size. Pancreatic tumours are faint and ill-defined inside an organ the training data barely covers, so their whole appearance is new to the model. Two weaknesses seen in E3 are at their extreme here: low contrast and under-segmentation of large lesions.
   - **Caveat:** the lesion–shell contrast compares a tumour with a shell that can include fat and vessels. It is not the contrast against the pancreas itself.
-- *A mask-based location analysis* (where exactly the Pancreas predictions land) *was not done.* The figures already show small blobs on kidney, bowel and vessels away from the tumour, and the comparison above answers the main question. The time goes to the report instead. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
+- *A mask-based location analysis* (where exactly the Pancreas predictions land) *was not done.* The figures already show small blobs on kidney, bowel and vessels away from the tumour, and the comparison above answers the main question. The time goes to the report instead.
+
+**D48. No E4 (2D) and no E5 (more seeds). The energy estimate uses the Green Algorithms model with stated assumptions (confirmed by the student, 2026-11-13).**
+- *E4 and E5 are not run.* The project focuses on E1 → E1b, the test result, E2 and E3. Together these argue for the procedure and show where the data and the model reach their limits.
+  - **E5** would cost about 5 h of A100 time per seed, plus queueing. The paired test already shows that the E1 → E1b gain is significant (p = 0.002, D44). The single seed per model goes in the limitations.
+  - **E4** is not run either. A 2D model is mentioned in the discussion as a possibly cheaper alternative that was not tested.
+- *Energy method* (details and sources in COMPUTE_LOG.md, "Totals and assumptions"):
+  - **GPU energy** is measured from `nvidia-smi` samples.
+  - **CPU, memory and cooling** are estimated per job with the Green Algorithms model (Lannelongue et al. 2021): 8 cores at 7.5 W each (3.5 W in the low case), 0.3725 W per GB of requested memory, and PUE 1.67 (1.2 in the low case). The home PC uses PUE 1.
+  - **Why this model:** it is published and widely used, and every number in it can be checked. IDUN's own PUE and node CPUs were not available, so they are given as ranges, not single values.
+- *Result:* 2.75 kWh measured on GPUs, and about 5.9 kWh in total (range 4.3–5.9). That is about 31 km of EV driving at 19.1 kWh/100 km (EV Database), with a range of 22–31 km. The two training runs are 94 % of it.
+- *Is the cost justified?* Points for the discussion:
+  - **Small in absolute terms:** the whole project used about the energy of one short car trip. E1b, the experiment that tested the low-contrast hypothesis, cost about 2.6 kWh (14 km) for +0.048 centre-component Dice on val, and it confirmed the hypothesis.
+  - **Fewer epochs would have been almost as good.**
+    - E1's centre-component Dice was nearly flat from epoch 140 (D43).
+    - E1b reached 0.439 by epoch 160, against 0.454 at epoch 250.
+    - Stopping at about 150 epochs would have saved roughly 40 % of the training energy (about 2 kWh) for about 0.015 centre-component Dice.
+    - Raw Dice was still rising, so the choice depends on the metric.
+  - **The cache made training cheaper.** The data wait was about 1 s per epoch, so the GPU was busy almost all the time, and the runs were shorter than they would have been without it.
+  - **GPU type matters as much as the method.** E1b ran on an A100-PCIE-40GB. It used about 18 % less energy per run than E1 on the SXM4-80GB, but took about 16 % longer, part of which is the extra input channel.
+  - **Not tried:** a 2D model, smaller patches, or a subset of the data. Each could cut the cost, and each would probably lose some accuracy (untested).
+  - **Inference is cheap:** 0.3–0.45 s per VOI, about 0.02 Wh of GPU energy. So most of the energy goes into training, not into using the model. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
 
 ## Phase 3: E1 and Gate 2
 

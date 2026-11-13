@@ -26,6 +26,9 @@ All external code, data and sources used in the project. Required by the project
 
 - Claude Code (Anthropic) was used as a coding assistant for the code, configs and documentation. All design decisions were reviewed by the student and are logged in `DECISIONS.md`.
 
-## Compute
+## Compute and energy
 
 - NTNU IDUN cluster documentation: https://www.hpc.ntnu.no/idun/
+- L. Lannelongue, J. Grealey, M. Inouye, *Green Algorithms: Quantifying the Carbon Footprint of Computation*, Advanced Science 8(12) (2021) 2100707. https://doi.org/10.1002/advs.202100707. Used for the energy model, the memory power (0.3725 W/GB), and the global average PUE of 1.67 (which it takes from the Uptime Institute, 2019).
+- EV Database, *Energy consumption of full electric vehicles*: average real-world consumption 191 Wh/km. https://ev-database.org/cheatsheet/energy-consumption-electric-car (accessed 2026-11-13).
+- CPU power per core from vendor TDPs: Intel Xeon Gold 6148 (150 W, 20 cores), https://www.intel.com/content/www/us/en/products/sku/120489/intel-xeon-gold-6148-processor-27-5m-cache-2-40-ghz/specifications.html; AMD EPYC 7742 (225 W default TDP, 64 cores), https://www.amd.com/en/support/downloads/drivers.html/processors/epyc/epyc-7002-series/amd-epyc-7742.html.
