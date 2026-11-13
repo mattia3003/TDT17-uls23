@@ -14,7 +14,7 @@ import torch
 import src.training.trainer as trainer
 from src.data.manifest import load_nifti, spatial_array
 from src.evaluation.evaluator import evaluate_run, summarise
-from src.evaluation.figures import pick_examples, save_examples, worst_lesions
+from src.evaluation.figures import pick_examples, sample_band, save_examples, worst_lesions
 from src.evaluation.metrics import keep_centre_component, overlap_metrics
 from src.training.checkpoint import config_differences, load_checkpoint
 from src.utils.compute import energy_summary, read_power_log
@@ -183,6 +183,18 @@ def test_pick_examples_and_worst_lesions() -> None:
     assert list(zip(picks["pick"], picks["case"])) == [("worst", "a2"), ("median", "a3"), ("best", "a1"),
                                                        ("worst", "b1"), ("median", "b1"), ("best", "b1")]
     assert worst_lesions(lesions, 2)["case"].tolist() == ["a2", "b1"]
+
+
+def test_sample_band_is_per_dataset_random_and_fixed() -> None:
+    lesions = pd.DataFrame({"dataset": ["A"] * 30 + ["B"] * 3, "case": [f"c{i:02d}" for i in range(33)],
+                            "dice_pp": [0.0] * 20 + [0.3] * 10 + [0.0, 0.3, 0.9]})
+    missed = sample_band(lesions, 0.0, 0.05, 5, "missed")
+    assert missed["dataset"].tolist() == ["A"] * 5 + ["B"]               # up to 5 per dataset
+    assert (missed["dice_pp"] < 0.05).all() and missed["pick"].iloc[-1] == "missed 6"
+    assert missed["case"].tolist() != [f"c{i:02d}" for i in range(5)] + ["c30"]  # not the first by name
+    assert missed.equals(sample_band(lesions, 0.0, 0.05, 5, "missed"))  # same seed, same sample
+    assert sample_band(lesions, 0.05, 0.5, 5, "partial")["dice_pp"].eq(0.3).all()
+    assert sample_band(lesions, 0.95, 1.0, 5, "x").empty
 
 
 def test_summarise_groups() -> None:

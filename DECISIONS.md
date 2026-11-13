@@ -346,7 +346,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 - *Checks:* a unit test trains a tiny model and checks that `evaluate.py` gives exactly the Dice that training's validation recorded for `best.pt`. On the real-file sample with the E0 weights, it reproduced D38's per-lesion Dice (`000010` 0.829, `bone_00002` 0.939). The two Pancreas lesions scored 0, as expected for a model that memorised 4 non-Pancreas VOIs.
 - *Qualitative figures (`scripts/qualitative.py`):* the script reads an evaluation folder and writes `figures/examples.png` and `figures/worst.png`, each with a CSV of the chosen cases. It needs no GPU and only a few dozen VOIs, so it runs on the login node.
   - `examples.png` shows the worst, median and best lesion of each dataset by raw Dice.
-  - `worst.png` shows the 12 worst lesions overall, for the failure review in E3.
+  - `worst.png` shows the 12 worst lesions overall, for the failure review in E3. (Ties are broken by case name, so it is not a fair sample when many lesions score 0; see D46.)
   - Each lesion gets two panels on its largest label slice: a zoom around the lesion, and the whole VOI slice, so false positives away from the lesion are visible. The label is outlined in amber and the raw prediction in blue. The display windows and offset correction are the same as in the EDA gallery (D23).
   - On the sample, the outlines matched the anatomy, which confirms that the saved masks keep the VOI's orientation.
 
@@ -367,6 +367,21 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **Bootstrap:** 5000 resamples of lesions with a fixed seed, so the intervals are the same on every run.
 - *Check:* unit tests on synthetic tables check the bins, the counts and that row order doesn't matter. The script reproduces D44 exactly: +0.049 (95 % interval +0.014 to +0.083), 43 better, 22 worse, 21 rescued, 7 lost, p = 0.002.
 - *Outputs so far:* `results/e1_vs_e1b_val`, `results/e1_vs_e1b_train`, `results/e3_test` and `results/e2_pancreas`.
+
+**D46. The E3 failure review uses random samples of missed and of partly found lesions per dataset, not `worst.png` (confirmed by the student, 2026-11-13).**
+- *Problem:* 92 of the 289 test lesions have raw Dice exactly 0 (60 DeepLesion3D, 32 Bone). `worst.png` breaks ties by case name, so its "12 worst" were the first 12 zero-Dice lesions alphabetically. They were all DeepLesion3D from low patient numbers, and Bone did not appear at all. The same applied to the E1 validation figure that D43 described, so that sentence has been corrected.
+- *First look at those 12 anyway* (E1b, test). All are complete misses:
+  - 6 have low contrast (< 50 HU);
+  - 3 have good contrast (87–362 HU), but the model segmented a vessel or nodule a few millimetres away. Nothing tells the model that the lesion is at the VOI centre;
+  - 2 are the same chest-wall lesion in two studies of one patient;
+  - 1 is small (6.8 mm).
+  - None shows a boundary error or an obvious annotation issue.
+- *Fix (`scripts/qualitative.py`, `src/evaluation/figures.py`):* two new figures, each with a CSV of its lesions.
+  - **`missed.png`:** up to 10 lesions per dataset, drawn at random with a fixed seed (0) from the missed lesions (centre-component Dice < 0.05). It shows what a typical miss looks like in each dataset.
+  - **`partial.png`:** the same, drawn from lesions with centre-component Dice from 0.05 to 0.5. This is where boundary errors and partly found lesions show up, which `worst.png` cannot show.
+  - Every figure now has a title saying how its lesions were chosen. `worst.png` is kept, and its title says that ties are broken by case name.
+  - `--sample` and `--seed` change the size and the seed of the samples.
+- *Checks:* a unit test checks that the sample is per dataset, stays within its Dice band, isn't simply the first lesions by name, and is the same on every run. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
 
 ## Phase 3: E1 and Gate 2
 
@@ -393,7 +408,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
     | 50–100 HU | 44 % | 27 % | 0.42 |
     | > 100 HU | 26 % | 8 % | 0.54 |
 
-  - **By category:** Kidney lesions are missed 91 % of the time and Liver lesions 67 % (val), against 9 % for bone-type lesions. The 12 worst validation lesions are all faint DeepLesion3D soft-tissue lesions, with no prediction at the centre.
+  - **By category:** Kidney lesions are missed 91 % of the time and Liver lesions 67 % (val), against 9 % for bone-type lesions. The 12 worst validation lesions are all faint DeepLesion3D soft-tissue lesions, with no prediction at the centre. *Corrected 2026-11-13 (D46):* those 12 all had Dice 0 and were the first such lesions by case name, not a fair sample. The contrast and category numbers above come from all lesions and still stand.
   - **Slice spacing has no effect.** Lesions on 1 mm and 5 mm slices score the same (0.38 against 0.37 on val, 0.50 against 0.48 on train). This rules out anisotropy, which had been a suspect.
   - **Size matters less than contrast.** Lesions under 10 mm do somewhat worse.
   - **False positives:** the predicted volume is about 2.3× the true lesion volume (median). Precision rises from 0.21 to 0.52 after D30, so the false positives sit mostly away from the target.

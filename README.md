@@ -128,7 +128,12 @@ sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits test      # Phase 4, onc
 sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits heldout   # E2: all of Pancreas
 ```
 
-**Figures** of the worst, median and best lesion per dataset, and of the 12 worst lesions overall, are drawn from an evaluation folder. This needs no GPU and is fine on the login node:
+**Figures** are drawn from an evaluation folder:
+- the worst, median and best lesion per dataset;
+- the 12 lowest-scoring lesions, with ties broken by case name;
+- for the failure review, random samples of up to 10 missed and 10 partly found lesions per dataset (D46).
+
+This needs no GPU and is fine on the login node:
 
 ```bash
 python scripts/qualitative.py --run e1_dynunet3d --eval val_best --machine configs/machines/idun.yaml
