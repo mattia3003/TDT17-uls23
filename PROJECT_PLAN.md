@@ -2,6 +2,8 @@
 
 **Hand-off plan for Claude Code.** Read this whole file before doing anything, then start at Phase 0.
 
+> **Status (2026-11-13):** Phases 0–4 are done. The final model is E1b (D44). The results are in DECISIONS.md (D43, D44, D47, D48), the energy totals in COMPUTE_LOG.md, the tables and figures in `results/`, and the video script in `VIDEO_SCRIPT.md`. What remains is Phase 5: the slides, the recording and the submission. The plan below is kept as written, with progress notes and ticks added as the work went on. Where a later decision replaced part of it, the text says so.
+
 ## 1. Project summary
 
 | | |
@@ -101,7 +103,7 @@ These facts come from the public challenge material. The copy on IDUN may differ
 - **Counts:** there are 1618 images and 1560 labels. 58 images have no label: 7 DeepLesion3D, 47 Bone and 4 Pancreas. Every label has an image. *(Verified in Phase 1.)*
 - **Patient IDs:** DeepLesion3D filenames follow `<patient>_<study>_<series>_<slice>_lesion_<nn>`, and Radboud filenames follow `bone_<id>_lesion_<nn>` and `diag_pancreas_<id>_lesion_<nn>`. That gives 549, 151 and 119 groups. For Bone this means a median of 3 and up to 21 lesions per ID, so grouping is essential. *(Verified in Phase 1; D10.)*
 - **Baseline spacing:** the ULS23 nnU-Net baseline used **no resampling**, through a dummy resampling function. This supports keeping the original spacing.
-- **Official split:** `baseline_model/train_test_split.json` covers all 1560 labelled lesions (170 test). It is patient-grouped: none of our 819 groups is on both sides. It is used for our test split (D15). *(Verified in Phase 1.)*
+- **Official split:** `baseline_model/train_test_split.json` covers all 1560 labelled lesions (170 test). It is patient-grouped: none of our 819 groups is on both sides. It is used for our test split (D15). *(Verified in Phase 1. Replaced on 2026-11-12 by the course's own split, D41.)*
 - **Intensity offset (verified):** 555 of the 744 Bone VOIs are stored shifted by +1024 (minimum exactly 0, air near +23). The rest of Bone, and all of DeepLesion3D and Pancreas, are in HU. This explains the README's Bone statistics. It is corrected by a data-driven rule (D17).
 - **File format (verified):** volumes are stored as `(256, 256, 128, 1)` float32. 13 labels are plain 3-D int16. MONAI hides the extra axis, but plain nibabel does not (D11).
 - **Spacing (verified):** in-plane spacing is 0.33–0.98 mm and slice spacing is 0.45–5 mm. DeepLesion3D is split about evenly between 1 mm and 5 mm slices.
@@ -148,6 +150,7 @@ Commit the derived split file.
 |---|---|---|---|
 | E0 | Overfit a few VOIs | Does the pipeline work? | Minutes |
 | E1 | **3D model**: MONAI `DynUNet` with Dice + CE loss | How good is a well-configured 3D U-Net? | 1 run |
+| E1b | **Added at Gate 2 (D43):** E1 plus a second, soft-tissue input channel | Does a soft-tissue window fix the missed low-contrast lesions? Final model (D44) | 1 run |
 | E2 | **Generalization**: E1 on the held-out dataset | How does it do on an unseen lesion type? | None |
 | E3 | **Breakdown**: results by dataset, lesion size, slice spacing, Bone intensity group and DeepLesion3D category, plus failure review | Where does it fail, and why? | None |
 | E4 | **Optional: 2D vs 3D**: 2D U-Net trained on slices, evaluated as reassembled 3D volumes | What is 3D context worth, and at what compute cost? | 1 run |
@@ -281,7 +284,9 @@ Keep the 3–5 most useful figures for the video.
 >
 > **Progress (2026-11-13, figures):** four summary figures in `results/figures/`, drawn from the results tables (D49).
 >
-> **Next:** the example panels with the new spacing, then the video script and slides (section 8).
+> **Progress (2026-11-13, video):** the example panels were redrawn with the new spacing and copied to `results/figures/`. The video script is drafted in `VIDEO_SCRIPT.md`: 19 slides in the 8 required sections, about 11:30.
+>
+> **Next:** the student reviews the script, then makes the slides and records the video.
 
 - [x] Write the central seeding function and the config loader.
 - [x] Write the split generator, with its own fixed seed and a check that no patient appears in two splits.
@@ -316,17 +321,17 @@ The student also decides here whether to run **optional E4 (2D vs 3D)** and **op
 ### Phase 4: Evaluation
 
 - [x] Evaluate once on the test split. *(E1b, 2026-11-13.)*
-- [x] **E2:** evaluate on the held-out dataset. *(Dice about 0.001; analysis still to do.)*
+- [x] **E2:** evaluate on the held-out dataset. *(Dice about 0.001; analysed in D47.)*
 - [x] **E3:** produce the breakdown tables, and review the worst 10–20 cases by failure type (small lesion, low contrast, boundary error, annotation issue, nearby lesion). *(`scripts/analyse.py` (D45); 40 sampled lesions reviewed (D46, D47).)*
 - [ ] If E4 was run, evaluate both models on the same test lesions and produce the comparison.
 - [ ] If E5 was run, evaluate every seed and report the mean ± standard deviation across runs.
 - [x] Measure inference time per VOI. *(0.45 s on a V100, 0.31–0.35 s on an A100-PCIE.)*
 - [x] Complete the energy estimate (section 7). *(About 5.9 kWh in total (range 4.3–5.9), about 31 km of EV driving; COMPUTE_LOG.md, D48.)*
-- [ ] Create final figures, including best, median and worst examples. *(Summary figures done in `results/figures/` (D49). Still to do: rerun `qualitative.py` on IDUN for the new row spacing and copy the example panels.)*
+- [x] Create final figures, including best, median and worst examples. *(`results/figures/`: four summary figures (D49) and the example panels used in the video.)*
 
 ### Phase 5: Video and submission
 
-- [ ] Write the script and slides following section 8, and keep to 12 minutes.
+- [ ] Write the script and slides following section 8, and keep to 12 minutes. *(Script drafted in `VIDEO_SCRIPT.md`, about 11:30. Slides still to make.)*
 - [ ] Add a short README with reproduction steps.
 - [ ] The student records the video and submits at the location the course announces.
 

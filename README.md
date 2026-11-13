@@ -1,6 +1,46 @@
 # TDT17 mini-project: 3D lesion segmentation on ULS23 (MONAI)
 
-3D lesion segmentation on a subset of the ULS23 CT dataset with MONAI `DynUNet`. See `PROJECT_PLAN.md` for scope, `DECISIONS.md` for design choices and `REFERENCES.md` for sources.
+3D lesion segmentation on a subset of the ULS23 CT dataset with MONAI `DynUNet`. Individual project for TDT17 Visual Intelligence at NTNU. The deliverable is a video of at most 12 minutes, due 27 Nov 2026.
+
+## Status and results (2026-11-13)
+
+All experiments are done. What remains is the video (Phase 5).
+
+**What was done:**
+1. **EDA** of the three ULS23 datasets on IDUN (D8–D23).
+2. **Pipeline:** training, evaluation, analysis and figures, with 63 unit tests.
+3. **E0:** an overfit check (D38).
+4. **E1:** a 3D DynUNet. The diagnosis: it underfits and misses low-contrast lesions (D43).
+5. **E1b:** one targeted retrain with an added soft-tissue input channel (D44).
+6. **Evaluation:** the test split, once (D47); **E2**, zero-shot on held-out Pancreas (D47); and the **E3** breakdowns and failure review (D45–D47).
+7. **Energy estimate** (D48).
+
+E4 (2D) and E5 (more seeds) were not run (D48).
+
+| Final model E1b | Lesions | Raw Dice | Centre-component Dice | Missed |
+|---|---|---|---|---|
+| Validation | 173 | 0.261 | 0.454 (E1: 0.406) | 32 % (E1: 40 %) |
+| Test (used once) | 289 | 0.258 | 0.418 | 36 % |
+| E2: Pancreas, never trained on | 120 | 0.001 | 0.001 | 99 % |
+
+- **Centre-component Dice** keeps only the predicted piece at the VOI centre (D30), and it is the selection metric (D43). A lesion is **missed** when that score is below 0.05.
+- **The E1 → E1b gain is significant:** paired Wilcoxon p = 0.002, and it is concentrated on low-contrast lesions.
+- **Energy:** 2.75 kWh measured on GPUs, about 5.9 kWh in total, about 31 km of EV driving (COMPUTE_LOG.md).
+
+**Where to find what:**
+
+| File | Contents |
+|---|---|
+| `VIDEO_SCRIPT.md` | The video, slide by slide: slide text, figure paths and spoken script |
+| `DECISIONS.md` | Every design choice and result with its reasoning, D1–D49 (start with D43, D44, D47, D48) |
+| `PROJECT_PLAN.md` | The original plan, the experiment design, progress notes per phase, and the video outline (section 8) |
+| `COMPUTE_LOG.md` | Every IDUN and home-PC job, including failures; energy totals and assumptions |
+| `REFERENCES.md` | Data, software, papers and tools used |
+| `results/eda/` | Data-analysis tables and figures (Phase 1) |
+| `results/e1_vs_e1b_val/`, `results/e1_vs_e1b_train/` | Paired E1 against E1b comparison per group and per lesion |
+| `results/e3_test/` | Test-split breakdown (`breakdown.csv`) and the failure review of 40 sampled lesions (`failure_review.csv`) |
+| `results/e2_pancreas/` | Pancreas breakdown and the comparison with DeepLesion3D lesions of similar contrast and size |
+| `results/figures/` | Summary figures (training curves, missed by contrast, test breakdown, E2) and the example panels used in the video |
 
 ## Layout
 
@@ -104,6 +144,7 @@ python scripts/train.py --config configs/experiments/e0_overfit.yaml --machine c
 sbatch --time=00:30:00 slurm/train.slurm configs/experiments/timing.yaml
 sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml
 sbatch slurm/train.slurm configs/experiments/e1_dynunet3d.yaml --resume
+sbatch slurm/train.slurm configs/experiments/e1b_dynunet3d_2ch.yaml   # E1b, the final model (D43)
 ```
 
 Before training starts, `train.py` checks that every training and validation file exists. If any are missing, it stops within seconds and names one of the missing files.
@@ -123,10 +164,13 @@ python scripts/evaluate.py --run e0_overfit_v2 --splits train val heldout --case
 
 ```bash
 # IDUN (the Slurm script adds --machine configs/machines/idun.yaml)
-sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits val       # Gate 2: inspect validation predictions
-sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits test      # Phase 4, once
-sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits heldout   # E2: all of Pancreas
+sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits val             # Gate 2: inspect validation predictions
+sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits train           # Gate 2: underfitting check
+sbatch slurm/evaluate.slurm --run e1b_dynunet3d_2ch --splits test       # Phase 4, once, final model only
+sbatch slurm/evaluate.slurm --run e1b_dynunet3d_2ch --splits heldout    # E2: all of Pancreas
 ```
+
+The jobs that were actually run, with their IDs, are listed in `COMPUTE_LOG.md`.
 
 **Figures** are drawn from an evaluation folder:
 - the worst, median and best lesion per dataset;

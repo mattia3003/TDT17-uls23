@@ -2,6 +2,8 @@
 
 Short log of non-obvious choices, so each one can be explained in the video. Newest last.
 
+**Where to start:** the main results are D43 (E1 and its diagnosis), D44 (E1b and the paired comparison), D47 (test split, E2 on Pancreas, and the E3 failure review) and D48 (energy). The data findings that drove the design are D14–D19 and D30. The splits are D41. Some early entries were later replaced; each one says so and names the entry that replaced it.
+
 ## Phase 0: Setup
 
 **D1. Python 3.11 + venv.** Already installed on the home PC and a standard module on HPC clusters. All pinned packages ship wheels for it. Python 3.14 (also installed) is too new for some scientific wheels.
@@ -239,7 +241,7 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
 
 ## Phase 2: Timing
 
-**D39. IDUN timing run: the job got a P100, which is about 5× slower than the home PC's RTX 2080 Ti. The E1 GPU type and epoch count are still open.**
+**D39. IDUN timing run: the job got a P100, which is about 5× slower than the home PC's RTX 2080 Ti. The E1 GPU type and epoch count are still open.** *(Settled in D40.)*
 - *Run:* job 25947781, `configs/experiments/timing.yaml`: 60 training steps on the full training set, after a 10-VOI validation check, with no cache and 8 data workers. It completed in 3.5 minutes.
 - *Result:*
 
@@ -350,131 +352,6 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - Each lesion gets two panels on its largest label slice: a zoom around the lesion, and the whole VOI slice, so false positives away from the lesion are visible. The label is outlined in amber and the raw prediction in blue. The display windows and offset correction are the same as in the EDA gallery (D23).
   - On the sample, the outlines matched the anatomy, which confirms that the saved masks keep the VOI's orientation.
 
-**D45. `scripts/analyse.py`: the breakdown and paired-comparison tables come from the per-lesion CSVs, in the repo, written to `results/` (confirmed by the student, 2026-11-13).**
-- *Why:* the D43 and D44 numbers were first computed with throwaway scripts. Every table in the report should be reproducible from the repo. The script reads only `per_lesion.csv` files, so it needs no GPU, no images and no IDUN, and the outputs are small enough to commit.
-- *Two commands:*
-  - **`breakdown`** (one model) writes `breakdown.csv`. For each dataset and factor it gives the lesion count, the mean raw Dice, the mean and median centre-component Dice, the missed fraction, raw and D30 precision, and the median ratio of predicted to true volume.
-  - **`compare`** (two models on the same lesions) writes:
-    - `paired.csv`, with per group: both means, the mean change with a 95 % bootstrap interval, the median change, the lesions better or worse by more than 0.05, the missed fraction of each model, rescued and lost lesions, and a Wilcoxon p-value;
-    - `paired_lesions.csv`, with every lesion sorted by change, for the figures and the review.
-- *Fixed choices* (constants in `src/evaluation/analysis.py`, the same as in D43 and D44):
-  - **Missed:** a lesion is missed when its centre-component Dice is below 0.05.
-  - **Bins** include their upper edge:
-    - size by equivalent diameter: 10, 15, 20 and 30 mm;
-    - contrast by the absolute lesion–shell difference: 20, 50 and 100 HU (the sign is dropped, since faint lesions can be slightly brighter or darker than their shell);
-    - slice spacing: 1.5 and 3.5 mm.
-  - **Wilcoxon p-values** only for groups where at least 10 lesions changed; smaller groups get no p-value, because it would not be reliable.
-  - **Bootstrap:** 5000 resamples of lesions with a fixed seed, so the intervals are the same on every run.
-- *Check:* unit tests on synthetic tables check the bins, the counts and that row order doesn't matter. The script reproduces D44 exactly: +0.049 (95 % interval +0.014 to +0.083), 43 better, 22 worse, 21 rescued, 7 lost, p = 0.002.
-- *Outputs so far:* `results/e1_vs_e1b_val`, `results/e1_vs_e1b_train`, `results/e3_test` and `results/e2_pancreas`.
-
-**D46. The E3 failure review uses random samples of missed and of partly found lesions per dataset, not `worst.png` (confirmed by the student, 2026-11-13).**
-- *Problem:* 92 of the 289 test lesions have raw Dice exactly 0 (60 DeepLesion3D, 32 Bone). `worst.png` breaks ties by case name, so its "12 worst" were the first 12 zero-Dice lesions alphabetically. They were all DeepLesion3D from low patient numbers, and Bone did not appear at all. The same applied to the E1 validation figure that D43 described, so that sentence has been corrected.
-- *First look at those 12 anyway* (E1b, test). All are complete misses:
-  - 6 have low contrast (< 50 HU);
-  - 3 have good contrast (87–362 HU), but the model segmented a vessel or nodule a few millimetres away. Nothing tells the model that the lesion is at the VOI centre;
-  - 2 are the same chest-wall lesion in two studies of one patient;
-  - 1 is small (6.8 mm).
-  - None shows a boundary error or an obvious annotation issue.
-- *Fix (`scripts/qualitative.py`, `src/evaluation/figures.py`):* two new figures, each with a CSV of its lesions.
-  - **`missed.png`:** up to 10 lesions per dataset, drawn at random with a fixed seed (0) from the missed lesions (centre-component Dice < 0.05). It shows what a typical miss looks like in each dataset.
-  - **`partial.png`:** the same, drawn from lesions with centre-component Dice from 0.05 to 0.5. This is where boundary errors and partly found lesions show up, which `worst.png` cannot show.
-  - Every figure now has a title saying how its lesions were chosen. `worst.png` is kept, and its title says that ties are broken by case name.
-  - `--sample` and `--seed` change the size and the seed of the samples.
-- *Checks:* a unit test checks that the sample is per dataset, stays within its Dice band, isn't simply the first lesions by name, and is the same on every run.
-- *Figure layout:* row spacing was increased after the first test figures, because each row's titles overlapped the images above them.
-
-## Phase 4: Test, E2 and E3
-
-**D47. Results of the final model E1b: test split (once), E2 on Pancreas and the E3 failure review (review checked by the student, 2026-11-13).**
-- *Test split* (`results/e3_test/breakdown.csv`, job 26098860):
-
-  | | Lesions | Raw Dice | Centre-component Dice, mean (median) | Missed |
-  |---|---|---|---|---|
-  | All | 289 | 0.258 | 0.418 (0.424) | 36 % |
-  | DeepLesion3D | 149 | 0.279 | 0.412 (0.557) | 41 % |
-  | Bone | 140 | 0.236 | 0.424 (0.400) | 31 % |
-  | DeepLesion3D, patient not in course train | 88 | 0.261 | 0.385 | |
-
-  - **Test against val:** test is a little below val (0.418 against 0.454). That is expected, since the model was chosen on val, and each split has only about 150 lesions per dataset.
-  - **Bone:** 94 % of the Bone test lesions share a patient with training (D41), yet Bone scored lower on test than on the patient-grouped val. So the overlap did not visibly inflate the result. The clean Bone subset has only 8 lesions, too few to report on its own.
-- *Breakdowns (test):*
-  - **Contrast is the strongest factor.** DeepLesion3D lesions under 50 HU are missed about 61 % of the time (51 lesions), against 26 % above 100 HU.
-  - **By category:** Liver (73 % missed), Kidney (71 %) and Abdominal (61 %) are the weak categories. Bone-type lesions in DeepLesion3D are missed only 12 % of the time.
-  - **Small lesions:** more than half of lesions under 10 mm are missed in both datasets.
-  - **Slice spacing has no effect,** as on val (D43).
-  - **Volume:** the predicted volume is a median 4.3× the lesion's in Bone (12× under 10 mm). DeepLesion3D lesions over 30 mm get only 0.08× (5 lesions).
-- *E3 failure review* (`results/e3_test/failure_review.csv`, D46 samples): one primary type per lesion, read from the figures by Claude and checked by the student.
-
-  | Missed (20) | Lesions | | Partly found (20) | Lesions |
-  |---|---|---|---|---|
-  | Low contrast (faint soft tissue, or lytic in bone) | 10 | | Under-segmented: right lesion, only part of it | 12 |
-  | Model segments a nearby structure | 4 | | Boundary error on a small lesion | 5 |
-  | Small (5–6 mm) | 2 | | Prediction mostly on a nearby structure | 3 |
-  | Unusual appearance or location | 2 | | | |
-  | Found only a tiny part | 2 | | | |
-
-  - **Low contrast explains half the misses, in both datasets.** Lytic or faint bone lesions (−98 to +43 HU against their shell) fail the same way as faint soft-tissue lesions.
-  - **Under-segmentation explains most partial finds.** The model finds the most visible part, for example the dense part of a mixed bone lesion, and stops there.
-  - **Nearby structures (7 of 40):** the model segments a vessel, rib or node beside the lesion. Nothing tells the model that the lesion is at the VOI centre, so a centre prior is a concrete idea for future work.
-  - **Repeated studies fail alike.** The same lesion in two studies of one patient fails the same way: the chest-wall lesion is missed twice, and the 000658 node is under-segmented to about 0.3 twice.
-  - **No clear annotation errors** in the 40.
-  - **Limitation:** each lesion was judged on one slice by one reader.
-- *E2: Pancreas, zero-shot* (`results/e2_pancreas/breakdown.csv`, job 26098861):
-  - **Result:** mean Dice 0.001 over 120 tumours, with 119 missed.
-  - **The model does predict something:** a median of about 2 800 voxels per VOI. But only 6 predictions touch the tumour at all, and the predicted volume is a median 0.31× the tumour's.
-  - **Not a bug:**
-    - the labels lie on the visible darker mass in the figures;
-    - the same pipeline scores 0.42 on the test split;
-    - Pancreas is stored in HU, so no intensity correction is involved.
-  - **Size and contrast do not explain it alone.** Comparison with DeepLesion3D lesions evaluated by the same model (train, val and test):
-
-    | Lesions | n | Missed |
-    |---|---|---|
-    | DeepLesion3D, contrast ≤ 20 HU | 98 | 56 % |
-    | DeepLesion3D, contrast ≤ 20 HU and ≥ 15 mm | 25 | 44 % (39 % on training lesions) |
-    | DeepLesion3D Abdominal, contrast ≤ 20 HU | 31 | 74 % |
-    | Pancreas, contrast median 4 HU, median 27 mm | 120 | 99 % |
-    | Pancreas tumours with contrast > 40 HU | 7 | 100 % |
-
-    So Pancreas fails far more often than DeepLesion3D lesions with similar contrast and size. Pancreatic tumours are faint and ill-defined inside an organ the training data barely covers, so their whole appearance is new to the model. Two weaknesses seen in E3 are at their extreme here: low contrast and under-segmentation of large lesions.
-  - **Caveat:** the lesion–shell contrast compares a tumour with a shell that can include fat and vessels. It is not the contrast against the pancreas itself.
-- *A mask-based location analysis* (where exactly the Pancreas predictions land) *was not done.* The figures already show small blobs on kidney, bowel and vessels away from the tumour, and the comparison above answers the main question. The time goes to the report instead.
-
-**D48. No E4 (2D) and no E5 (more seeds). The energy estimate uses the Green Algorithms model with stated assumptions (confirmed by the student, 2026-11-13).**
-- *E4 and E5 are not run.* The project focuses on E1 → E1b, the test result, E2 and E3. Together these argue for the procedure and show where the data and the model reach their limits.
-  - **E5** would cost about 5 h of A100 time per seed, plus queueing. The paired test already shows that the E1 → E1b gain is significant (p = 0.002, D44). The single seed per model goes in the limitations.
-  - **E4** is not run either. A 2D model is mentioned in the discussion as a possibly cheaper alternative that was not tested.
-- *Energy method* (details and sources in COMPUTE_LOG.md, "Totals and assumptions"):
-  - **GPU energy** is measured from `nvidia-smi` samples.
-  - **CPU, memory and cooling** are estimated per job with the Green Algorithms model (Lannelongue et al. 2021): 8 cores at 7.5 W each (3.5 W in the low case), 0.3725 W per GB of requested memory, and PUE 1.67 (1.2 in the low case). The home PC uses PUE 1.
-  - **Why this model:** it is published and widely used, and every number in it can be checked. IDUN's own PUE and node CPUs were not available, so they are given as ranges, not single values.
-- *Result:* 2.75 kWh measured on GPUs, and about 5.9 kWh in total (range 4.3–5.9). That is about 31 km of EV driving at 19.1 kWh/100 km (EV Database), with a range of 22–31 km. The two training runs are 94 % of it.
-- *Is the cost justified?* Points for the discussion:
-  - **Small in absolute terms:** the whole project used about the energy of one short car trip. E1b, the experiment that tested the low-contrast hypothesis, cost about 2.6 kWh (14 km) for +0.048 centre-component Dice on val, and it confirmed the hypothesis.
-  - **Fewer epochs would have been almost as good.**
-    - E1's centre-component Dice was nearly flat from epoch 140 (D43).
-    - E1b reached 0.439 by epoch 160, against 0.454 at epoch 250.
-    - Stopping at about 150 epochs would have saved roughly 40 % of the training energy (about 2 kWh) for about 0.015 centre-component Dice.
-    - Raw Dice was still rising, so the choice depends on the metric.
-  - **The cache made training cheaper.** The data wait was about 1 s per epoch, so the GPU was busy almost all the time, and the runs were shorter than they would have been without it.
-  - **GPU type matters as much as the method.** E1b ran on an A100-PCIE-40GB. It used about 18 % less energy per run than E1 on the SXM4-80GB, but took about 16 % longer, part of which is the extra input channel.
-  - **Not tried:** a 2D model, smaller patches, or a subset of the data. Each could cut the cost, and each would probably lose some accuracy (untested).
-  - **Inference is cheap:** 0.3–0.45 s per VOI, about 0.02 Wh of GPU energy.
-
-**D49. Four summary figures for the report and video, drawn by `scripts/report_figures.py` from the results tables and training logs (confirmed by the student, 2026-11-13).**
-- *Figures* (`results/figures/`):
-  - **`training_curves.png`:** validation Dice per epoch for E1 and E1b, raw and centre component. E1b leads on the selection metric from about epoch 80.
-  - **`missed_by_contrast.png`:** the fraction of lesions missed per contrast bin, E1 against E1b, on validation and on the training split, per dataset. This is the core of the E1 → E1b story (D43, D44).
-  - **`test_breakdown.png`:** the final model on the test split, by contrast for both datasets and by DeepLesion3D category (D47).
-  - **`e2_pancreas.png`:** the fraction of Pancreas tumours missed, next to DeepLesion3D lesions of similar contrast and size (D47).
-  - The example panels come from `scripts/qualitative.py` (D46).
-- *Reproducible tables:* the E2 comparison table is now made by a third `analyse.py` command, `heldout` (`results/e2_pancreas/heldout_comparison.csv`). The figure script reads only the `results/` tables and the logs, so every number in the figures also exists as a CSV.
-- *Colour:* the datasets keep their EDA colours (DeepLesion3D blue, Bone orange, Pancreas green), so a colour means the same thing in every figure. The models get two other slots of the same palette: E1 pink and E1b purple.
-  - A grey "baseline" for E1 was tried first, but it failed the palette validator's chroma check (grey can't carry identity).
-  - The pink/purple pair passes every check, except that pink is below 3:1 contrast against the background. So E1 is always named in a legend or label.
-- *Checks:* a unit test draws all four figures from small synthetic tables. Each figure was opened and checked for clipped titles and overlapping labels. So most of the energy goes into training, not into using the model. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
-
 ## Phase 3: E1 and Gate 2
 
 **D43. E1 underfits and misses low-contrast lesions. Gate 2: one targeted retrain, E1b, with a second input channel in a soft-tissue window (confirmed by the student, 2026-11-12).**
@@ -566,6 +443,134 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - **Why not:** with two weeks to the deadline, the E1 → E1b comparison and its analysis matter more for the report and video than a few hundredths of Dice.
   - **Report:** the remaining underfitting and the false positives go in as findings and future work.
   - **Consequence:** the test split is now used once, for E1b, so no later model can be compared on it.
-- *Optional experiments:* E4 and E5 were not run before the test. E5 (more seeds of E1b) could still be run afterwards, since it only measures run-to-run spread and selects nothing.
+- *Optional experiments:* E4 and E5 were not run before the test. E5 (more seeds of E1b) could still be run afterwards, since it only measures run-to-run spread and selects nothing. *(Decided in D48: neither is run.)*
 - *Compute for the comparison:* val and training-split evaluation of E1b took 0.034 h and 0.157 h of script time, 0.028 kWh in total (COMPUTE_LOG).
 
+## Phase 4: Analysis tools
+
+**D45. `scripts/analyse.py`: the breakdown and paired-comparison tables come from the per-lesion CSVs, in the repo, written to `results/` (confirmed by the student, 2026-11-13).**
+- *Why:* the D43 and D44 numbers were first computed with throwaway scripts. Every table in the report should be reproducible from the repo. The script reads only `per_lesion.csv` files, so it needs no GPU, no images and no IDUN, and the outputs are small enough to commit.
+- *Two commands:*
+  - **`breakdown`** (one model) writes `breakdown.csv`. For each dataset and factor it gives the lesion count, the mean raw Dice, the mean and median centre-component Dice, the missed fraction, raw and D30 precision, and the median ratio of predicted to true volume.
+  - **`compare`** (two models on the same lesions) writes:
+    - `paired.csv`, with per group: both means, the mean change with a 95 % bootstrap interval, the median change, the lesions better or worse by more than 0.05, the missed fraction of each model, rescued and lost lesions, and a Wilcoxon p-value;
+    - `paired_lesions.csv`, with every lesion sorted by change, for the figures and the review.
+- *Fixed choices* (constants in `src/evaluation/analysis.py`, the same as in D43 and D44):
+  - **Missed:** a lesion is missed when its centre-component Dice is below 0.05.
+  - **Bins** include their upper edge:
+    - size by equivalent diameter: 10, 15, 20 and 30 mm;
+    - contrast by the absolute lesion–shell difference: 20, 50 and 100 HU (the sign is dropped, since faint lesions can be slightly brighter or darker than their shell);
+    - slice spacing: 1.5 and 3.5 mm.
+  - **Wilcoxon p-values** only for groups where at least 10 lesions changed; smaller groups get no p-value, because it would not be reliable.
+  - **Bootstrap:** 5000 resamples of lesions with a fixed seed, so the intervals are the same on every run.
+- *Check:* unit tests on synthetic tables check the bins, the counts and that row order doesn't matter. The script reproduces D44 exactly: +0.049 (95 % interval +0.014 to +0.083), 43 better, 22 worse, 21 rescued, 7 lost, p = 0.002.
+- *Outputs so far:* `results/e1_vs_e1b_val`, `results/e1_vs_e1b_train`, `results/e3_test` and `results/e2_pancreas`.
+
+**D46. The E3 failure review uses random samples of missed and of partly found lesions per dataset, not `worst.png` (confirmed by the student, 2026-11-13).**
+- *Problem:* 92 of the 289 test lesions have raw Dice exactly 0 (60 DeepLesion3D, 32 Bone). `worst.png` breaks ties by case name, so its "12 worst" were the first 12 zero-Dice lesions alphabetically. They were all DeepLesion3D from low patient numbers, and Bone did not appear at all. The same applied to the E1 validation figure that D43 described, so that sentence has been corrected.
+- *First look at those 12 anyway* (E1b, test). All are complete misses:
+  - 6 have low contrast (< 50 HU);
+  - 3 have good contrast (87–362 HU), but the model segmented a vessel or nodule a few millimetres away. Nothing tells the model that the lesion is at the VOI centre;
+  - 2 are the same chest-wall lesion in two studies of one patient;
+  - 1 is small (6.8 mm).
+  - None shows a boundary error or an obvious annotation issue.
+- *Fix (`scripts/qualitative.py`, `src/evaluation/figures.py`):* two new figures, each with a CSV of its lesions.
+  - **`missed.png`:** up to 10 lesions per dataset, drawn at random with a fixed seed (0) from the missed lesions (centre-component Dice < 0.05). It shows what a typical miss looks like in each dataset.
+  - **`partial.png`:** the same, drawn from lesions with centre-component Dice from 0.05 to 0.5. This is where boundary errors and partly found lesions show up, which `worst.png` cannot show.
+  - Every figure now has a title saying how its lesions were chosen. `worst.png` is kept, and its title says that ties are broken by case name.
+  - `--sample` and `--seed` change the size and the seed of the samples.
+- *Checks:* a unit test checks that the sample is per dataset, stays within its Dice band, isn't simply the first lesions by name, and is the same on every run.
+- *Figure layout:* row spacing was increased after the first test figures, because each row's titles overlapped the images above them.
+
+## Phase 4: Test, E2 and E3
+
+**D47. Results of the final model E1b: test split (once), E2 on Pancreas and the E3 failure review (review checked by the student, 2026-11-13).**
+- *Test split* (`results/e3_test/breakdown.csv`, job 26098860):
+
+  | | Lesions | Raw Dice | Centre-component Dice, mean (median) | Missed |
+  |---|---|---|---|---|
+  | All | 289 | 0.258 | 0.418 (0.424) | 36 % |
+  | DeepLesion3D | 149 | 0.279 | 0.412 (0.557) | 41 % |
+  | Bone | 140 | 0.236 | 0.424 (0.400) | 31 % |
+  | DeepLesion3D, patient not in course train | 88 | 0.261 | 0.385 | |
+
+  - **Test against val:** test is a little below val (0.418 against 0.454). That is expected, since the model was chosen on val, and each split has only about 150 lesions per dataset.
+  - **Bone:** 94 % of the Bone test lesions share a patient with training (D41), yet Bone scored lower on test than on the patient-grouped val. So the overlap did not visibly inflate the result. The clean Bone subset has only 8 lesions, too few to report on its own.
+- *Breakdowns (test):*
+  - **Contrast is the strongest factor.** DeepLesion3D lesions under 50 HU are missed about 61 % of the time (51 lesions), against 26 % above 100 HU.
+  - **By category:** Liver (73 % missed), Kidney (71 %) and Abdominal (61 %) are the weak categories. Bone-type lesions in DeepLesion3D are missed only 12 % of the time.
+  - **Small lesions:** more than half of lesions under 10 mm are missed in both datasets.
+  - **Slice spacing has no effect,** as on val (D43).
+  - **Volume:** the predicted volume is a median 4.3× the lesion's in Bone (12× under 10 mm). DeepLesion3D lesions over 30 mm get only 0.08× (5 lesions).
+- *E3 failure review* (`results/e3_test/failure_review.csv`, D46 samples): one primary type per lesion, read from the figures by Claude and checked by the student.
+
+  | Missed (20) | Lesions | | Partly found (20) | Lesions |
+  |---|---|---|---|---|
+  | Low contrast (faint soft tissue, or lytic in bone) | 10 | | Under-segmented: right lesion, only part of it | 12 |
+  | Model segments a nearby structure | 4 | | Boundary error on a small lesion | 5 |
+  | Small (5–6 mm) | 2 | | Prediction mostly on a nearby structure | 3 |
+  | Unusual appearance or location | 2 | | | |
+  | Found only a tiny part | 2 | | | |
+
+  - **Low contrast explains half the misses, in both datasets.** Lytic or faint bone lesions (−98 to +43 HU against their shell) fail the same way as faint soft-tissue lesions.
+  - **Under-segmentation explains most partial finds.** The model finds the most visible part, for example the dense part of a mixed bone lesion, and stops there.
+  - **Nearby structures (7 of 40):** the model segments a vessel, rib or node beside the lesion. Nothing tells the model that the lesion is at the VOI centre, so a centre prior is a concrete idea for future work.
+  - **Repeated studies fail alike.** The same lesion in two studies of one patient fails the same way: the chest-wall lesion is missed twice, and the 000658 node is under-segmented to about 0.3 twice.
+  - **No clear annotation errors** in the 40.
+  - **Limitation:** each lesion was judged on one slice by one reader.
+- *E2: Pancreas, zero-shot* (`results/e2_pancreas/breakdown.csv`, job 26098861):
+  - **Result:** mean Dice 0.001 over 120 tumours, with 119 missed.
+  - **The model does predict something:** a median of about 2 800 voxels per VOI. But only 6 predictions touch the tumour at all, and the predicted volume is a median 0.31× the tumour's.
+  - **Not a bug:**
+    - the labels lie on the visible darker mass in the figures;
+    - the same pipeline scores 0.42 on the test split;
+    - Pancreas is stored in HU, so no intensity correction is involved.
+  - **Size and contrast do not explain it alone.** Comparison with DeepLesion3D lesions evaluated by the same model (train, val and test):
+
+    | Lesions | n | Missed |
+    |---|---|---|
+    | DeepLesion3D, contrast ≤ 20 HU | 98 | 56 % |
+    | DeepLesion3D, contrast ≤ 20 HU and ≥ 15 mm | 25 | 44 % (39 % on training lesions) |
+    | DeepLesion3D Abdominal, contrast ≤ 20 HU | 31 | 74 % |
+    | Pancreas, contrast median 4 HU, median 27 mm | 120 | 99 % |
+    | Pancreas tumours with contrast > 40 HU | 7 | 100 % |
+
+    So Pancreas fails far more often than DeepLesion3D lesions with similar contrast and size. Pancreatic tumours are faint and ill-defined inside an organ the training data barely covers, so their whole appearance is new to the model. Two weaknesses seen in E3 are at their extreme here: low contrast and under-segmentation of large lesions.
+  - **Caveat:** the lesion–shell contrast compares a tumour with a shell that can include fat and vessels. It is not the contrast against the pancreas itself.
+- *A mask-based location analysis* (where exactly the Pancreas predictions land) *was not done.* The figures already show small blobs on kidney, bowel and vessels away from the tumour, and the comparison above answers the main question. The time goes to the report instead.
+
+## Phase 4: Energy and figures
+
+**D48. No E4 (2D) and no E5 (more seeds). The energy estimate uses the Green Algorithms model with stated assumptions (confirmed by the student, 2026-11-13).**
+- *E4 and E5 are not run.* The project focuses on E1 → E1b, the test result, E2 and E3. Together these argue for the procedure and show where the data and the model reach their limits.
+  - **E5** would cost about 5 h of A100 time per seed, plus queueing. The paired test already shows that the E1 → E1b gain is significant (p = 0.002, D44). The single seed per model goes in the limitations.
+  - **E4** is not run either. A 2D model is mentioned in the discussion as a possibly cheaper alternative that was not tested.
+- *Energy method* (details and sources in COMPUTE_LOG.md, "Totals and assumptions"):
+  - **GPU energy** is measured from `nvidia-smi` samples.
+  - **CPU, memory and cooling** are estimated per job with the Green Algorithms model (Lannelongue et al. 2021): 8 cores at 7.5 W each (3.5 W in the low case), 0.3725 W per GB of requested memory, and PUE 1.67 (1.2 in the low case). The home PC uses PUE 1.
+  - **Why this model:** it is published and widely used, and every number in it can be checked. IDUN's own PUE and node CPUs were not available, so they are given as ranges, not single values.
+- *Result:* 2.75 kWh measured on GPUs, and about 5.9 kWh in total (range 4.3–5.9). That is about 31 km of EV driving at 19.1 kWh/100 km (EV Database), with a range of 22–31 km. The two training runs are 94 % of it.
+- *Is the cost justified?* Points for the discussion:
+  - **Small in absolute terms:** the whole project used about the energy of one short car trip. E1b, the experiment that tested the low-contrast hypothesis, cost about 2.6 kWh (14 km) for +0.048 centre-component Dice on val, and it confirmed the hypothesis.
+  - **Fewer epochs would have been almost as good.**
+    - E1's centre-component Dice was nearly flat from epoch 140 (D43).
+    - E1b reached 0.439 by epoch 160, against 0.454 at epoch 250.
+    - Stopping at about 150 epochs would have saved roughly 40 % of the training energy (about 2 kWh) for about 0.015 centre-component Dice.
+    - Raw Dice was still rising, so the choice depends on the metric.
+  - **The cache made training cheaper.** The data wait was about 1 s per epoch, so the GPU was busy almost all the time, and the runs were shorter than they would have been without it.
+  - **GPU type matters as much as the method.** E1b ran on an A100-PCIE-40GB. It used about 18 % less energy per run than E1 on the SXM4-80GB, but took about 16 % longer, part of which is the extra input channel.
+  - **Not tried:** a 2D model, smaller patches, or a subset of the data. Each could cut the cost, and each would probably lose some accuracy (untested).
+  - **Inference is cheap:** 0.3–0.45 s per VOI, about 0.02 Wh of GPU energy.
+
+**D49. Four summary figures for the report and video, drawn by `scripts/report_figures.py` from the results tables and training logs (confirmed by the student, 2026-11-13).**
+- *Figures* (`results/figures/`):
+  - **`training_curves.png`:** validation Dice per epoch for E1 and E1b, raw and centre component. E1b leads on the selection metric from about epoch 80.
+  - **`missed_by_contrast.png`:** the fraction of lesions missed per contrast bin, E1 against E1b, on validation and on the training split, per dataset. This is the core of the E1 → E1b story (D43, D44).
+  - **`test_breakdown.png`:** the final model on the test split, by contrast for both datasets and by DeepLesion3D category (D47).
+  - **`e2_pancreas.png`:** the fraction of Pancreas tumours missed, next to DeepLesion3D lesions of similar contrast and size (D47).
+  - The example panels come from `scripts/qualitative.py` (D46).
+- *Reproducible tables:* the E2 comparison table is now made by a third `analyse.py` command, `heldout` (`results/e2_pancreas/heldout_comparison.csv`). The figure script reads only the `results/` tables and the logs, so every number in the figures also exists as a CSV.
+- *Colour:* the datasets keep their EDA colours (DeepLesion3D blue, Bone orange, Pancreas green), so a colour means the same thing in every figure. The models get two other slots of the same palette: E1 pink and E1b purple.
+  - A grey "baseline" for E1 was tried first, but it failed the palette validator's chroma check (grey can't carry identity).
+  - The pink/purple pair passes every check, except that pink is below 3:1 contrast against the background. So E1 is always named in a legend or label.
+- *Checks:* a unit test draws all four figures from small synthetic tables. Each figure was opened and checked for clipped titles and overlapping labels. So most of the energy goes into training, not into using the model. The real-file check on the sample drew `missed.png` correctly. The sample has no partly found lesions, so `partial.png` was skipped, as intended.
