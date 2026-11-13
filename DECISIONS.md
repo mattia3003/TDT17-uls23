@@ -350,6 +350,24 @@ The evidence comes from EDA job 25936150: `data/manifest.csv` and `results/eda/`
   - Each lesion gets two panels on its largest label slice: a zoom around the lesion, and the whole VOI slice, so false positives away from the lesion are visible. The label is outlined in amber and the raw prediction in blue. The display windows and offset correction are the same as in the EDA gallery (D23).
   - On the sample, the outlines matched the anatomy, which confirms that the saved masks keep the VOI's orientation.
 
+**D45. `scripts/analyse.py`: the breakdown and paired-comparison tables come from the per-lesion CSVs, in the repo, written to `results/` (confirmed by the student, 2026-11-13).**
+- *Why:* the D43 and D44 numbers were first computed with throwaway scripts. Every table in the report should be reproducible from the repo. The script reads only `per_lesion.csv` files, so it needs no GPU, no images and no IDUN, and the outputs are small enough to commit.
+- *Two commands:*
+  - **`breakdown`** (one model) writes `breakdown.csv`. For each dataset and factor it gives the lesion count, the mean raw Dice, the mean and median centre-component Dice, the missed fraction, raw and D30 precision, and the median ratio of predicted to true volume.
+  - **`compare`** (two models on the same lesions) writes:
+    - `paired.csv`, with per group: both means, the mean change with a 95 % bootstrap interval, the median change, the lesions better or worse by more than 0.05, the missed fraction of each model, rescued and lost lesions, and a Wilcoxon p-value;
+    - `paired_lesions.csv`, with every lesion sorted by change, for the figures and the review.
+- *Fixed choices* (constants in `src/evaluation/analysis.py`, the same as in D43 and D44):
+  - **Missed:** a lesion is missed when its centre-component Dice is below 0.05.
+  - **Bins** include their upper edge:
+    - size by equivalent diameter: 10, 15, 20 and 30 mm;
+    - contrast by the absolute lesion–shell difference: 20, 50 and 100 HU (the sign is dropped, since faint lesions can be slightly brighter or darker than their shell);
+    - slice spacing: 1.5 and 3.5 mm.
+  - **Wilcoxon p-values** only for groups where at least 10 lesions changed; smaller groups get no p-value, because it would not be reliable.
+  - **Bootstrap:** 5000 resamples of lesions with a fixed seed, so the intervals are the same on every run.
+- *Check:* unit tests on synthetic tables check the bins, the counts and that row order doesn't matter. The script reproduces D44 exactly: +0.049 (95 % interval +0.014 to +0.083), 43 better, 22 worse, 21 rescued, 7 lost, p = 0.002.
+- *Outputs so far:* `results/e1_vs_e1b_val`, `results/e1_vs_e1b_train`, `results/e3_test` and `results/e2_pancreas`.
+
 ## Phase 3: E1 and Gate 2
 
 **D43. E1 underfits and misses low-contrast lesions. Gate 2: one targeted retrain, E1b, with a second input channel in a soft-tissue window (confirmed by the student, 2026-11-12).**

@@ -134,6 +134,15 @@ sbatch slurm/evaluate.slurm --run e1_dynunet3d --splits heldout   # E2: all of P
 python scripts/qualitative.py --run e1_dynunet3d --eval val_best --machine configs/machines/idun.yaml
 ```
 
+**Analysis tables** come from the per-lesion CSVs alone, so they run anywhere in seconds (D45). `breakdown` describes one model per dataset and factor (size, contrast, slice spacing, category, intensity group). `compare` pairs two models on the same lesions. The small CSVs go to `results/` and are committed. With the evaluation CSVs copied to `work/` on the PC:
+
+```powershell
+python scripts/analyse.py compare work/e1_val_per_lesion.csv work/e1b_val_per_lesion.csv --names E1 E1b --out results/e1_vs_e1b_val
+python scripts/analyse.py compare work/e1_train_per_lesion.csv work/e1b_train_per_lesion.csv --names E1 E1b --out results/e1_vs_e1b_train
+python scripts/analyse.py breakdown work/e1b_test_per_lesion.csv --out results/e3_test
+python scripts/analyse.py breakdown work/e1b_heldout_per_lesion.csv --out results/e2_pancreas
+```
+
 `--splits` and `--cases` read every word after them until the next `--option`. Any `key=value` overrides must therefore come after another option, such as `--machine` or `--checkpoint best`. Otherwise they're read as split names and rejected.
 
 **Light work on the login node is fine:** things that take seconds and read only a few files, such as `scripts/eda.py --reuse-manifest`. Use the same environment as the jobs: `source slurm/idun_env.sh`. Anything that reads the whole dataset, or uses a GPU, goes through `sbatch`.

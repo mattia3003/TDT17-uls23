@@ -20,6 +20,8 @@ The training code records elapsed time and `nvidia-smi` power samples. On IDUN, 
 | 26092482 (`e1b_dynunet3d_2ch`) | IDUN GPUQ, 8 CPUs, `--constraint=a100` | E1b (as E1, plus a soft-tissue input channel, D43) | A100-PCIE-40GB | 5.01 (training code 4.98) | 233 | 1.16 | Completed. 64 s per epoch with 1 s data wait. Best val Dice 0.261 (centre component 0.454) at the last epoch. Not the same A100 model as E1 (SXM4-80GB): `a100` matches both, so time and energy are not directly comparable. MaxRSS 61.3 GB against a 64 GB request; like E1's 32.0 GB against 32 GB, this is mostly reclaimable file cache from reading the cache files, not a risk of the job being killed. |
 | 26097081 | IDUN GPUQ, 8 CPUs | Evaluation of E1b `best.pt` on val (173 VOIs) | V100-PCIE-16GB | 0.055 (script 0.034) | 125 | 0.004 | Completed. Mean val Dice 0.261 (centre component 0.454), the same as the last validation in training. 0.46 s prediction per VOI. |
 | 26097082 | IDUN GPUQ, 8 CPUs | Evaluation of E1b `best.pt` on the training split (978 VOIs) | A100-PCIE-40GB | 0.178 (script 0.157) | 154 | 0.024 | Completed. Mean train Dice 0.349 (centre component 0.554). 0.31 s prediction per VOI. |
+| 26098860 | IDUN GPUQ, 8 CPUs | Final model E1b on the test split (289 VOIs), run once (D44) | V100-PCIE-16GB | 0.062 (script 0.058) | 146 | 0.008 | Completed. Mean test Dice 0.258 (centre component 0.418). 0.45 s prediction per VOI. |
+| 26098861 | IDUN GPUQ, 8 CPUs | E2: E1b on all of Pancreas (120 VOIs) | A100-PCIE-40GB | 0.024 (script 0.020) | 165 | 0.003 | Completed. Mean Dice 0.001: the model finds almost none of the pancreatic tumours. 0.35 s prediction per VOI. |
 
 ## Totals and assumptions
 
