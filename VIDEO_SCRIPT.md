@@ -141,7 +141,7 @@ The thread through the video is the procedure:
   - Close to validation (0.454), as expected after selecting on it.
   - Missed: Liver 73 %, Kidney 71 %, Abdominal 61 %, but bone-type lesions only 12 %. Slice spacing: no effect.
 - **Visual:** `results/figures/test_breakdown.png`.
-- **Say (0:20):** "On the test split, evaluated once, the final model reaches a centre-component Dice of 0.42, close to validation. Contrast again explains most of the variation. Faint liver, kidney and abdominal lesions are missed most often, while bone-type lesions are rarely missed."
+- **Say (0:20):** "On the test split, evaluated once, the final model reaches a centre-component Dice of 0.42, close to validation, and both DeepLesion3D and Bone scores similar. Contrast again explains most of the variation. Faint liver, kidney and abdominal lesions are missed most often, while bone-type lesions are missed less."
 
 ### Slide 14: Pancreas: a near-complete failure, and why
 - **Slide text:**
@@ -176,7 +176,7 @@ The thread through the video is the procedure:
     - more diverse training data (Pancreas).
   - **Reference points from the ULS23 paper** (Table 2): Bone Dice 0.674; Pancreas 0.56–0.62 for models that *were* trained on pancreas data. It is a different split and about 40× more training data, so these are context, not a comparison (PROJECT_PLAN.md, section 3).
 - **Visual:** text only.
-- **Say (0:45):** "The main limit is data. I trained on under a thousand lesions from two datasets, while the challenge baseline used about 38,000. Pancreas shows what that means for unseen lesion types. Each model was trained once, so the size of the E1b gain is uncertain, even though it's significant. And the bone test lesions share patients with training. Next, I'd tell the model where the centre is with an extra input channel, train longer, since both runs were still improving, and above all train on more varied data."
+- **Say (0:45):** "The main limit is data. I trained on under a thousand lesions from two datasets, while the challenge baseline used about 38,000. Pancreas shows what that means for unseen lesion types. The ULS23 reference metrics can be seen on screee. Each model was trained once, so the size of the E1b gain is uncertain, even though it's significant. And the bone test lesions share patients with training. Next, I'd tell the model where the centre is with an extra input channel, train longer, since both runs were still improving, and above all train on more varied data."
 
 ### Slide 17: Sustainability
 - **Slide text:**
