@@ -98,7 +98,7 @@ The thread through the video is the procedure:
   - **Fail-fast file checks:** when the course data was reorganised twice, the jobs stopped within two minutes instead of failing hours in (D41).
   - **Evaluation reproduces training's validation exactly:** 0.244 = 0.244.
 - **Visual:** a checklist with ticks.
-- **Say (0:40):** "Before the real run, I checked the pipeline cheaply. Overfitting four lesions reached a Dice of 0.9, so the code can learn. A short timing run showed a P100 would be twelve times slower than an A100. A check that stops a job within seconds if data files are missing paid off twice, when the course data was reorganised. And the evaluation script reproduces the training run's validation score exactly."
+- **Say (0:40):** "Before the real run, I checked the pipeline cheaply. Overfitting four lesions reached a Dice of 0.9, so the code can learn. A short timing run showed a P100 would be twelve times slower than an A100. A check that stops a job within two minutes if data files are missing paid off twice, when the course data was reorganised. And the evaluation script reproduces the training run's validation score exactly."
 
 ### Slide 10: Metrics
 - **Slide text:**
